@@ -9,7 +9,10 @@ export const InteractiveCursor: React.FC = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isClicking, setIsClicking] = useState(false);
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [isTouchDevice] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
+  });
 
   const hoveredRef = useRef(false);
   const visibleRef = useRef(false);
@@ -23,11 +26,7 @@ export const InteractiveCursor: React.FC = () => {
   const smoothY = useSpring(rawY, springConfig);
 
   useEffect(() => {
-    // Detect touch-only screens
-    if (window.matchMedia('(pointer: coarse)').matches) {
-      setIsTouchDevice(true);
-      return;
-    }
+    if (isTouchDevice) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       rawX.set(e.clientX);

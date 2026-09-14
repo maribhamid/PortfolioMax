@@ -7,7 +7,10 @@ export const CursorSpotlight: React.FC = () => {
   const config = data.settings.effectsConfig?.cursorSpotlight;
 
   const [isVisible, setIsVisible] = useState(false);
-  const [isTouch, setIsTouch] = useState(false);
+  const [isTouch] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
+  });
   const visibleRef = useRef(false);
 
   const rawX = useMotionValue(-1000);
@@ -19,10 +22,7 @@ export const CursorSpotlight: React.FC = () => {
   const smoothY = useSpring(rawY, springConfig);
 
   useEffect(() => {
-    if (window.matchMedia('(pointer: coarse)').matches) {
-      setIsTouch(true);
-      return;
-    }
+    if (isTouch) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       rawX.set(e.clientX);

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Send, Copy, Check, Sparkles, MapPin, Clock, Phone, Globe } from 'lucide-react';
 import { GithubIcon, LinkedinIcon, TwitterIcon } from '../ui/SocialIcons';
-import confetti from 'canvas-confetti';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { BorderBeam } from '../ui/BorderBeam';
 import { ShimmerButton } from '../ui/ShimmerButton';
@@ -24,29 +23,39 @@ export const Contact: React.FC = () => {
     message: '',
   });
 
-  const handleCopyEmail = () => {
+  const handleCopyEmail = async () => {
     navigator.clipboard.writeText(contact.email);
     setCopied(true);
     soundManager.playSuccess();
-    confetti({
-      particleCount: 50,
-      spread: 60,
-      origin: { y: 0.8 },
-    });
+    try {
+      const confetti = (await import('canvas-confetti')).default;
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.8 },
+      });
+    } catch {
+      // Confetti fallback
+    }
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.message) return;
 
     soundManager.playSuccess();
-    confetti({
-      particleCount: 120,
-      spread: 90,
-      origin: { y: 0.7 },
-      colors: ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'],
-    });
+    try {
+      const confetti = (await import('canvas-confetti')).default;
+      confetti({
+        particleCount: 120,
+        spread: 90,
+        origin: { y: 0.7 },
+        colors: ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'],
+      });
+    } catch {
+      // Confetti fallback
+    }
     setSubmitted(true);
   };
 

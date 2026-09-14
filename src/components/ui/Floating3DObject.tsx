@@ -152,6 +152,7 @@ export const Floating3DObject: React.FC<Floating3DObjectProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const isEnabled = config?.enabled ?? true;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
   const shape = shapeOverride || config?.shape || 'icosahedron';
   const speed = config?.speed ?? 1.0;
   const scaleMultiplier = config?.scale ?? 1.0;
@@ -162,7 +163,7 @@ export const Floating3DObject: React.FC<Floating3DObjectProps> = ({
 
   // Mouse tilt tracking (throttled)
   useEffect(() => {
-    if (!interactive) return;
+    if (!interactive || isMobile) return;
 
     let ticking = false;
     const handleMouseMove = (e: MouseEvent) => {
@@ -186,7 +187,7 @@ export const Floating3DObject: React.FC<Floating3DObjectProps> = ({
 
   // Canvas render loop with 0 React state updates
   useEffect(() => {
-    if (!isEnabled) return;
+    if (!isEnabled || isMobile) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -317,7 +318,7 @@ export const Floating3DObject: React.FC<Floating3DObjectProps> = ({
     };
   }, [isEnabled, shape, speed, scaleMultiplier, size, data.settings.customPrimaryColor, data.settings.customAccentColor]);
 
-  if (!isEnabled) return null;
+  if (!isEnabled || isMobile) return null;
 
   return (
     <div

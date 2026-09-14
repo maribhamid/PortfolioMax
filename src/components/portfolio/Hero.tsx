@@ -251,6 +251,10 @@ export const Hero: React.FC = () => {
                 src={hero.avatarUrl}
                 alt={hero.name}
                 style={avatarStyle}
+                fetchPriority="high"
+                decoding="async"
+                width="400"
+                height="500"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />

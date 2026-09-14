@@ -8,7 +8,9 @@ interface MeteorsProps {
 
 export const Meteors: React.FC<MeteorsProps> = ({ number = 20, className }) => {
   const meteorStyles = useMemo(() => {
-    return Array.from({ length: number }).map(() => ({
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    const effectiveNumber = isMobile ? Math.min(8, number) : number;
+    return Array.from({ length: effectiveNumber }).map(() => ({
       top: Math.floor(Math.random() * 80) - 20 + '%',
       left: Math.floor(Math.random() * 100) + '%',
       animationDelay: (Math.random() * 5).toFixed(2) + 's',

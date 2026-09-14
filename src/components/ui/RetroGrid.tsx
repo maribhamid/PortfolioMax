@@ -19,8 +19,8 @@ export const RetroGrid: React.FC<RetroGridProps> = ({ className, angle = 65 }) =
       <div className="absolute inset-0 [transform:rotateX(var(--grid-angle))]">
         <div
           className={cn(
-            'animate-grid',
-            '[background-repeat:repeat] [background-size:60px_60px] [height:300vh] [inset:0%_0px] [margin-left:-50%] [transform-origin:100%_0_0] [width:600vw]',
+            'animate-grid will-change-transform',
+            '[background-repeat:repeat] [background-size:60px_60px] [height:200vh] md:[height:300vh] [inset:0%_0px] [margin-left:-50%] [transform-origin:100%_0_0] [width:200vw] md:[width:600vw]',
             // Light / Dark grid lines
             '[background-image:linear-gradient(to_right,rgba(15,23,42,0.07)_1px,transparent_0),linear-gradient(to_bottom,rgba(15,23,42,0.07)_1px,transparent_0)]',
             'dark:[background-image:linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_0),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_0)]'

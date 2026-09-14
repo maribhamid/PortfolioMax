@@ -6,17 +6,33 @@ import { RetroGrid } from './components/ui/RetroGrid';
 import { InteractiveCursor } from './components/ui/InteractiveCursor';
 import { CursorSpotlight } from './components/ui/CursorSpotlight';
 import { Hero } from './components/portfolio/Hero';
-import { About } from './components/portfolio/About';
-import { Projects } from './components/portfolio/Projects';
-import { Skills } from './components/portfolio/Skills';
-import { Experience } from './components/portfolio/Experience';
-import { Testimonials } from './components/portfolio/Testimonials';
-import { Contact } from './components/portfolio/Contact';
-import { Footer } from './components/portfolio/Footer';
 import { ScrollProgress } from './components/ui/ScrollProgress';
 import { Dock } from './components/ui/Dock';
 import { TopHeader } from './components/portfolio/TopHeader';
 import { soundManager } from './utils/audio';
+
+// Lazy-load below-the-fold sections for instant mobile initial paint
+const About = React.lazy(() =>
+  import('./components/portfolio/About').then((m) => ({ default: m.About }))
+);
+const Projects = React.lazy(() =>
+  import('./components/portfolio/Projects').then((m) => ({ default: m.Projects }))
+);
+const Skills = React.lazy(() =>
+  import('./components/portfolio/Skills').then((m) => ({ default: m.Skills }))
+);
+const Experience = React.lazy(() =>
+  import('./components/portfolio/Experience').then((m) => ({ default: m.Experience }))
+);
+const Testimonials = React.lazy(() =>
+  import('./components/portfolio/Testimonials').then((m) => ({ default: m.Testimonials }))
+);
+const Contact = React.lazy(() =>
+  import('./components/portfolio/Contact').then((m) => ({ default: m.Contact }))
+);
+const Footer = React.lazy(() =>
+  import('./components/portfolio/Footer').then((m) => ({ default: m.Footer }))
+);
 
 // Lazy-load heavy Admin CMS components to dramatically speed up initial portfolio load
 const AdminDashboard = React.lazy(() =>
@@ -82,14 +98,16 @@ const PortfolioContent: React.FC = () => {
         {!isAdminOpen && <TopHeader />}
         <main>
           {visibleSections?.hero !== false && <Hero />}
-          {visibleSections?.about !== false && <About />}
-          {visibleSections?.projects !== false && <Projects />}
-          {visibleSections?.skills !== false && <Skills />}
-          {visibleSections?.experience !== false && <Experience />}
-          {visibleSections?.testimonials !== false && <Testimonials />}
-          {visibleSections?.contact !== false && <Contact />}
+          <React.Suspense fallback={null}>
+            {visibleSections?.about !== false && <About />}
+            {visibleSections?.projects !== false && <Projects />}
+            {visibleSections?.skills !== false && <Skills />}
+            {visibleSections?.experience !== false && <Experience />}
+            {visibleSections?.testimonials !== false && <Testimonials />}
+            {visibleSections?.contact !== false && <Contact />}
+            <Footer />
+          </React.Suspense>
         </main>
-        <Footer />
       </div>
 
       {/* Bottom Floating Interactive Dock (The ONLY navigation bar) */}

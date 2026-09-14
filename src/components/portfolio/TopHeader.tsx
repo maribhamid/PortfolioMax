@@ -86,6 +86,9 @@ export const TopHeader: React.FC = () => {
                     src={hero.avatarUrl}
                     alt={hero.name}
                     style={avatarStyle}
+                    decoding="async"
+                    width="40"
+                    height="40"
                     className="w-full h-full object-cover rounded-[10px]"
                   />
                 </div>

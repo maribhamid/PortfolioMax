@@ -82,6 +82,10 @@ export const Testimonials: React.FC = () => {
                   <img
                     src={t.avatar}
                     alt={t.name}
+                    loading="lazy"
+                    decoding="async"
+                    width={40}
+                    height={40}
                     className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-white/10 bg-slate-200 dark:bg-slate-800"
                   />
                   <div>

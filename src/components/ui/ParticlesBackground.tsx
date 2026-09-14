@@ -32,7 +32,10 @@ export const ParticlesBackground: React.FC = () => {
 
     window.addEventListener('resize', handleResize, { passive: true });
 
-    const particleCount = density === 'low' ? 30 : density === 'high' ? 70 : 45;
+    const isMobile = window.innerWidth < 768;
+    const baseCount = density === 'low' ? 30 : density === 'high' ? 70 : 45;
+    const particleCount = isMobile ? Math.min(20, Math.round(baseCount * 0.4)) : baseCount;
+
     const particles: Array<{
       x: number;
       y: number;
@@ -68,7 +71,9 @@ export const ParticlesBackground: React.FC = () => {
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    if (!isMobile) {
+      window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    }
 
     const maxConnectDistSq = 100 * 100; // 10000
 

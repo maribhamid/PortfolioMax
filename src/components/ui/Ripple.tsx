@@ -14,6 +14,9 @@ export const Ripple = React.memo(function Ripple({
   numCircles = 8,
   className,
 }: RippleProps) {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const effectiveCircles = isMobile ? Math.min(4, numCircles) : numCircles;
+
   return (
     <div
       className={cn(
@@ -21,7 +24,7 @@ export const Ripple = React.memo(function Ripple({
         className
       )}
     >
-      {Array.from({ length: numCircles }, (_, i) => {
+      {Array.from({ length: effectiveCircles }, (_, i) => {
         const size = mainCircleSize + i * 70;
         const opacity = mainCircleOpacity - i * 0.03;
         const animationDelay = `${i * 0.06}s`;
