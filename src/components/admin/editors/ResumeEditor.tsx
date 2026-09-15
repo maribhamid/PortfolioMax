@@ -1,39 +1,85 @@
 import React, { useState } from 'react';
 import { usePortfolio } from '../../../context/PortfolioContext';
-import { FileText, Upload, Check, ExternalLink, Download, Trash2, Eye, Sparkles, HardDrive } from 'lucide-react';
+import { FileText, Upload, Check, ExternalLink, Download, Trash2, Eye, Sparkles, HardDrive, Loader2, AlertCircle } from 'lucide-react';
 import { soundManager } from '../../../utils/audio';
 import { formatGoogleDriveUrl } from '../../../utils/driveHelper';
+import { uploadFileToStorage } from '../../../lib/firebase';
 
 export const ResumeEditor: React.FC = () => {
   const { data, updateHero } = usePortfolio();
   const { hero } = data;
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Read as Base64 Data URL directly from local hard drive
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64Data = event.target?.result as string;
-      if (base64Data) {
+    setIsUploading(true);
+    setUploadStatus(`Uploading "${file.name}" to Cloud Storage...`);
+
+    try {
+      // 1. Attempt uploading directly to Firebase Storage first (gets permanent HTTPS URL)
+      const storageUrl = await uploadFileToStorage('resumes', file);
+      if (storageUrl) {
         updateHero({
-          resumeFile: base64Data,
+          resumeFile: storageUrl,
           resumeFileName: `${file.name} (${Math.round(file.size / 1024)} KB)`,
           resume: {
             ...hero.resume,
-            url: base64Data,
-            link: base64Data,
+            url: storageUrl,
+            link: storageUrl,
             show: true,
           },
         });
         soundManager.playSuccess();
-        setUploadStatus(`Directly loaded "${file.name}" from your drive into state!`);
-        setTimeout(() => setUploadStatus(null), 4000);
+        setUploadStatus(`Uploaded "${file.name}" to Firebase Cloud Storage!`);
+        setIsUploading(false);
+        setTimeout(() => setUploadStatus(null), 5000);
+        return;
       }
-    };
-    reader.readAsDataURL(file);
+
+      // 2. If storage is not configured, check file size for Firestore base64 limits
+      if (file.size > 500 * 1024) {
+        soundManager.playClick();
+        setUploadStatus(
+          `Notice: File is ${Math.round(file.size / 1024)} KB (exceeds 500 KB Firestore single-document limit). Please use a compressed PDF or paste a Google Drive public share link below!`
+        );
+        setIsUploading(false);
+        return;
+      }
+
+      // 3. Under 500 KB: safe to store as base64 in Firestore
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Data = event.target?.result as string;
+        if (base64Data) {
+          updateHero({
+            resumeFile: base64Data,
+            resumeFileName: `${file.name} (${Math.round(file.size / 1024)} KB)`,
+            resume: {
+              ...hero.resume,
+              url: base64Data,
+              link: base64Data,
+              show: true,
+            },
+          });
+          soundManager.playSuccess();
+          setUploadStatus(`Loaded "${file.name}" into database successfully!`);
+          setTimeout(() => setUploadStatus(null), 5000);
+        }
+        setIsUploading(false);
+      };
+      reader.onerror = () => {
+        setIsUploading(false);
+        setUploadStatus('Failed to read file from disk.');
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Failed to upload resume:', err);
+      setIsUploading(false);
+      setUploadStatus('Error uploading resume.');
+    }
   };
 
   const handleClearUploadedFile = () => {
@@ -142,9 +188,15 @@ export const ResumeEditor: React.FC = () => {
           </div>
         )}
 
-        <label className="w-full py-3.5 rounded-xl text-xs font-bold bg-white dark:bg-black/30 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-white flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 dark:border-white/20 hover:border-cyan-500 cursor-pointer transition-all shadow-xs">
-          <Upload className="w-4 h-4 text-cyan-500" />
-          <span>{hero.resumeFileName ? 'Replace Resume File from Drive' : 'Choose Local PDF File from Drive'}</span>
+        <label className={`w-full py-3.5 rounded-xl text-xs font-bold bg-white dark:bg-black/30 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-white flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 dark:border-white/20 hover:border-cyan-500 cursor-pointer transition-all shadow-xs ${
+          isUploading ? 'opacity-60 pointer-events-none' : ''
+        }`}>
+          {isUploading ? (
+            <Loader2 className="w-4 h-4 text-cyan-500 animate-spin" />
+          ) : (
+            <Upload className="w-4 h-4 text-cyan-500" />
+          )}
+          <span>{isUploading ? 'Uploading to Database...' : hero.resumeFileName ? 'Replace Resume File from Drive' : 'Choose Local PDF File from Drive'}</span>
           <input
             type="file"
             accept=".pdf,.doc,.docx,.txt"

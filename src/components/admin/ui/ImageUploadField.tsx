@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Link2, Image, Trash2, CheckCircle2, HardDrive, Sparkles } from 'lucide-react';
-import { formatGoogleDriveUrl, readFileAsDataUrl } from '../../../utils/driveHelper';
+import { Upload, Link2, Image, Trash2, CheckCircle2, HardDrive, Sparkles, Loader2 } from 'lucide-react';
+import { formatGoogleDriveUrl } from '../../../utils/driveHelper';
 import { soundManager } from '../../../utils/audio';
+import { compressImageFile, getDataUrlSizeKB } from '../../../utils/imageCompressor';
+import { uploadFileToStorage } from '../../../lib/firebase';
 
 interface ImageUploadFieldProps {
   label: string;
@@ -23,22 +25,50 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   const [activeMode, setActiveMode] = useState<'upload' | 'url'>('upload');
   const [urlInput, setUrlInput] = useState(value && !value.startsWith('data:') ? value : '');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Handle local drive file upload
+  // Handle local drive file upload with automatic cloud storage & compression
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setIsProcessing(true);
+    setStatusMessage(`Uploading & optimizing "${file.name}"...`);
+
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      onChange(dataUrl);
+      // 1. Attempt uploading directly to Firebase Storage first (if configured)
+      const storageUrl = await uploadFileToStorage('avatars', file);
+      if (storageUrl) {
+        onChange(storageUrl);
+        soundManager.playSuccess();
+        setStatusMessage(`Uploaded "${file.name}" to Firebase Cloud Storage!`);
+        setIsProcessing(false);
+        setTimeout(() => setStatusMessage(null), 5000);
+        return;
+      }
+
+      // 2. Fallback: Compress client-side so it fits in Firestore (< 1MB document limit)
+      const maxDim = aspectRatio === 'video' ? 1200 : 800;
+      const compressedDataUrl = await compressImageFile(file, {
+        maxWidth: maxDim,
+        maxHeight: maxDim,
+        quality: 0.82,
+        mimeType: 'image/webp',
+      });
+      const originalKB = Math.round(file.size / 1024);
+      const newKB = getDataUrlSizeKB(compressedDataUrl);
+
+      onChange(compressedDataUrl);
       soundManager.playSuccess();
-      setStatusMessage(`Loaded "${file.name}" (${Math.round(file.size / 1024)} KB)`);
-      setTimeout(() => setStatusMessage(null), 4000);
+      setStatusMessage(`Optimized image (${originalKB} KB ➔ ${newKB} KB) ready for database!`);
+      setTimeout(() => setStatusMessage(null), 5000);
     } catch (err) {
-      console.error('Failed to read image from drive:', err);
+      console.error('Failed to process image:', err);
       soundManager.playClick();
+      setStatusMessage('Failed to process image file. Please try another image.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -102,13 +132,23 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
       {/* Upload Mode: File input from Hard Drive */}
       {activeMode === 'upload' ? (
         <div className="space-y-2">
-          <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-white/20 hover:border-purple-500 dark:hover:border-purple-400 rounded-xl p-4 cursor-pointer bg-white/70 dark:bg-black/30 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-all group">
-            <Upload className="w-6 h-6 text-slate-400 group-hover:text-purple-500 group-hover:scale-110 transition-transform mb-1.5" />
+          <label className={`flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-white/20 hover:border-purple-500 dark:hover:border-purple-400 rounded-xl p-4 cursor-pointer bg-white/70 dark:bg-black/30 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-all group ${
+            isProcessing ? 'opacity-60 pointer-events-none' : ''
+          }`}>
+            {isProcessing ? (
+              <Loader2 className="w-6 h-6 text-purple-500 animate-spin mb-1.5" />
+            ) : (
+              <Upload className="w-6 h-6 text-slate-400 group-hover:text-purple-500 group-hover:scale-110 transition-transform mb-1.5" />
+            )}
             <span className="text-xs font-bold text-slate-700 dark:text-slate-200 group-hover:text-purple-600 dark:group-hover:text-purple-300">
-              {value ? 'Replace Image from Drive' : 'Choose Image from Hard Drive'}
+              {isProcessing
+                ? 'Optimizing Image...'
+                : value
+                ? 'Replace Image from Drive'
+                : 'Choose Image from Hard Drive'}
             </span>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-              PNG, JPG, WebP, GIF, SVG (embedded directly into state)
+              Auto-compressed to lightweight WebP & synced to Cloud
             </span>
             <input
               ref={fileInputRef}
