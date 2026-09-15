@@ -9,7 +9,7 @@ interface MeteorsProps {
 export const Meteors: React.FC<MeteorsProps> = ({ number = 20, className }) => {
   const meteorStyles = useMemo(() => {
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-    const effectiveNumber = isMobile ? Math.min(8, number) : number;
+    const effectiveNumber = isMobile ? Math.min(4, number) : number;
     return Array.from({ length: effectiveNumber }).map(() => ({
       top: Math.floor(Math.random() * 80) - 20 + '%',
       left: Math.floor(Math.random() * 100) + '%',

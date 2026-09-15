@@ -58,10 +58,10 @@ export const Hero: React.FC = () => {
       {/* Magic UI Ripple background */}
       <Ripple mainCircleSize={220} numCircles={6} mainCircleOpacity={0.15} />
 
-      {/* Ambient background glow balls */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-gradient-to-tr from-purple-600/20 via-indigo-600/15 to-cyan-500/20 blur-[130px] rounded-full pointer-events-none -z-10" />
-      <div className="absolute bottom-10 left-10 w-72 h-72 bg-purple-500/10 blur-[100px] rounded-full pointer-events-none -z-10" />
-      <div className="absolute top-20 right-10 w-80 h-80 bg-cyan-500/10 blur-[100px] rounded-full pointer-events-none -z-10" />
+      {/* Ambient background glow - lightweight radial gradient on mobile, full blur glow on desktop */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[600px] h-[400px] bg-[radial-gradient(circle_at_center,rgba(139,92,246,0.18)_0%,transparent_70%)] md:bg-gradient-to-tr md:from-purple-600/20 md:via-indigo-600/15 md:to-cyan-500/20 md:blur-[130px] rounded-full pointer-events-none -z-10" />
+      <div className="hidden md:block absolute bottom-10 left-10 w-72 h-72 bg-purple-500/10 blur-[100px] rounded-full pointer-events-none -z-10" />
+      <div className="hidden md:block absolute top-20 right-10 w-80 h-80 bg-cyan-500/10 blur-[100px] rounded-full pointer-events-none -z-10" />
 
       <div className="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
         {/* Left Column: Headlines & Content */}

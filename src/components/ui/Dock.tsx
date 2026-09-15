@@ -39,22 +39,27 @@ const DockIcon: React.FC<DockIconProps> = ({ mouseX, children, label, onClick, a
   const widthSync = useTransform(distance, [-110, 0, 110], [40, 56, 40]);
   const width = useSpring(widthSync, { mass: 0.1, stiffness: 170, damping: 14 });
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   return (
     <motion.div
       ref={ref}
-      style={{ width, height: width }}
+      style={isMobile ? undefined : { width, height: width }}
       onClick={() => {
         soundManager.playClick();
         onClick();
       }}
       onMouseEnter={() => {
-        soundManager.playHover();
-        setHovered(true);
+        if (!isMobile) {
+          soundManager.playHover();
+          setHovered(true);
+        }
       }}
       onMouseLeave={() => setHovered(false)}
       data-interactive="true"
       className={cn(
         'relative flex items-center justify-center rounded-2xl cursor-pointer transition-colors select-none shrink-0',
+        isMobile && 'w-9 h-9',
         active
           ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
           : 'bg-white/80 dark:bg-white/10 hover:bg-slate-200/80 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-white/10'

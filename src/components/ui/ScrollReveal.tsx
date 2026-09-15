@@ -45,13 +45,16 @@ export const ScrollReveal: React.FC<ScrollRevealProps> = ({
 
   const pos = getInitialPosition();
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const viewportMargin = isMobile ? '80px' : '-20px';
+
   // Subtle Preset (Smooth minimal glide)
   if (intensity === 'subtle') {
     return (
       <motion.div
         initial={{ opacity: 0, ...pos }}
         whileInView={{ opacity: 1, x: 0, y: 0 }}
-        viewport={{ once: true, margin: '-20px' }}
+        viewport={{ once: true, margin: viewportMargin }}
         transition={{ duration: 0.45, delay, ease: [0.25, 0.1, 0.25, 1] }}
         className={`will-change-transform ${className}`}
       >
@@ -67,7 +70,7 @@ export const ScrollReveal: React.FC<ScrollRevealProps> = ({
         initial={{
           opacity: 0,
           scale: 0.94,
-          rotateX: direction === 'up' ? 10 : 0,
+          rotateX: direction === 'up' ? (isMobile ? 0 : 10) : 0,
           ...pos,
         }}
         whileInView={{
@@ -77,13 +80,13 @@ export const ScrollReveal: React.FC<ScrollRevealProps> = ({
           x: 0,
           y: 0,
         }}
-        viewport={{ once: true, margin: '-30px' }}
+        viewport={{ once: true, margin: viewportMargin }}
         transition={{
-          duration: 0.75,
+          duration: 0.6,
           delay,
           ease: [0.16, 1, 0.3, 1],
         }}
-        style={{ perspective: 1000 }}
+        style={isMobile ? undefined : { perspective: 1000 }}
         className={`will-change-transform ${className}`}
       >
         {children}
@@ -96,7 +99,7 @@ export const ScrollReveal: React.FC<ScrollRevealProps> = ({
     <motion.div
       initial={{ opacity: 0, scale: 0.97, ...pos }}
       whileInView={{ opacity: 1, scale: 1, x: 0, y: 0 }}
-      viewport={{ once: true, margin: '-20px' }}
+      viewport={{ once: true, margin: viewportMargin }}
       transition={{ duration: 0.55, delay, ease: [0.215, 0.61, 0.355, 1] }}
       className={`will-change-transform ${className}`}
     >

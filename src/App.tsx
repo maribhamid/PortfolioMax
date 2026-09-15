@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PortfolioProvider, usePortfolio } from './context/PortfolioContext';
 import { ParticlesBackground } from './components/ui/ParticlesBackground';
 import { Meteors } from './components/ui/Meteors';
@@ -11,42 +11,113 @@ import { Dock } from './components/ui/Dock';
 import { TopHeader } from './components/portfolio/TopHeader';
 import { soundManager } from './utils/audio';
 
-// Lazy-load below-the-fold sections for instant mobile initial paint
-const About = React.lazy(() =>
+/**
+ * Resilient lazy loader with automatic retry on cellular network drop.
+ * Gracefully resolves to a null component if all retries fail, preventing blank-screen crashes.
+ */
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>,
+  retries = 2,
+  interval = 1000
+): React.LazyExoticComponent<T> {
+  return React.lazy(() =>
+    new Promise<{ default: T }>((resolve) => {
+      const attempt = (remainingRetries: number) => {
+        factory()
+          .then(resolve)
+          .catch((error) => {
+            if (remainingRetries <= 0) {
+              console.warn('Chunk load error after retries (preventing app crash):', error);
+              // Gracefully return empty component so the app stays functional
+              resolve({ default: (() => null) as unknown as T });
+              return;
+            }
+            setTimeout(() => attempt(remainingRetries - 1), interval);
+          });
+      };
+      attempt(retries);
+    })
+  );
+}
+
+// Section Error Boundary to isolate below-the-fold component failures
+class SectionErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: any) {
+    console.warn('Caught section render exception:', error);
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
+// Lazy-load below-the-fold sections with retry protection
+const About = lazyWithRetry(() =>
   import('./components/portfolio/About').then((m) => ({ default: m.About }))
 );
-const Projects = React.lazy(() =>
+const Projects = lazyWithRetry(() =>
   import('./components/portfolio/Projects').then((m) => ({ default: m.Projects }))
 );
-const Skills = React.lazy(() =>
+const Skills = lazyWithRetry(() =>
   import('./components/portfolio/Skills').then((m) => ({ default: m.Skills }))
 );
-const Experience = React.lazy(() =>
+const Experience = lazyWithRetry(() =>
   import('./components/portfolio/Experience').then((m) => ({ default: m.Experience }))
 );
-const Testimonials = React.lazy(() =>
+const Testimonials = lazyWithRetry(() =>
   import('./components/portfolio/Testimonials').then((m) => ({ default: m.Testimonials }))
 );
-const Contact = React.lazy(() =>
+const Contact = lazyWithRetry(() =>
   import('./components/portfolio/Contact').then((m) => ({ default: m.Contact }))
 );
-const Footer = React.lazy(() =>
+const Footer = lazyWithRetry(() =>
   import('./components/portfolio/Footer').then((m) => ({ default: m.Footer }))
 );
 
-// Lazy-load heavy Admin CMS components to dramatically speed up initial portfolio load
-const AdminDashboard = React.lazy(() =>
+// Lazy-load Admin CMS components (only fetched when opened)
+const AdminDashboard = lazyWithRetry(() =>
   import('./components/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
 );
-const AdminLoginModal = React.lazy(() =>
+const AdminLoginModal = lazyWithRetry(() =>
   import('./components/admin/AdminLoginModal').then((m) => ({ default: m.AdminLoginModal }))
 );
 
 const PortfolioContent: React.FC = () => {
-  const { data, isAdminOpen, setIsAdminOpen, adminView, openAdmin } = usePortfolio();
+  const {
+    data,
+    isAdminOpen,
+    setIsAdminOpen,
+    adminView,
+    openAdmin,
+    isLoginModalOpen,
+    isAuthenticated,
+  } = usePortfolio();
   const { settings } = data;
   const { visibleSections } = settings;
   const bgConfig = settings.effectsConfig?.interactiveBackground;
+
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Keyboard shortcut Ctrl+E or Cmd+E to toggle Admin
   useEffect(() => {
@@ -71,23 +142,21 @@ const PortfolioContent: React.FC = () => {
 
   return (
     <div className="relative min-h-screen bg-slate-50 dark:bg-[#090a0f] text-slate-900 dark:text-slate-100 selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden transition-colors duration-300">
-      {/* Interactive Cursor Spotlight Aura */}
-      <CursorSpotlight />
-
-      {/* Interactive Framer Motion Custom Cursor */}
-      <InteractiveCursor />
+      {/* Desktop-only Interactive Cursors (0 CPU/GPU overhead on touch phones) */}
+      {!isMobile && <CursorSpotlight />}
+      {!isMobile && <InteractiveCursor />}
 
       {/* Scroll Progress Bar at top */}
       <ScrollProgress />
 
-      {/* Magic UI Retro Cyber Grid */}
+      {/* Magic UI Retro Cyber Grid (smoothly adapted for mobile in RetroGrid) */}
       {showGrid && <RetroGrid />}
 
       {/* Magic UI Meteors Shooting Stars */}
-      {showMeteors && <Meteors number={25} />}
+      {showMeteors && <Meteors number={isMobile ? 4 : 25} />}
 
-      {/* Interactive Constellation Particles */}
-      {showParticles && <ParticlesBackground />}
+      {/* Particles canvas - run strictly on desktop to save mobile battery and avoid GPU thrash */}
+      {showParticles && !isMobile && <ParticlesBackground />}
 
       {/* Main Portfolio Layout with Top Brand Header & Bottom Dock Navigation */}
       <div
@@ -98,26 +167,30 @@ const PortfolioContent: React.FC = () => {
         {!isAdminOpen && <TopHeader />}
         <main>
           {visibleSections?.hero !== false && <Hero />}
-          <React.Suspense fallback={null}>
-            {visibleSections?.about !== false && <About />}
-            {visibleSections?.projects !== false && <Projects />}
-            {visibleSections?.skills !== false && <Skills />}
-            {visibleSections?.experience !== false && <Experience />}
-            {visibleSections?.testimonials !== false && <Testimonials />}
-            {visibleSections?.contact !== false && <Contact />}
-            <Footer />
-          </React.Suspense>
+          <SectionErrorBoundary>
+            <React.Suspense fallback={null}>
+              {visibleSections?.about !== false && <About />}
+              {visibleSections?.projects !== false && <Projects />}
+              {visibleSections?.skills !== false && <Skills />}
+              {visibleSections?.experience !== false && <Experience />}
+              {visibleSections?.testimonials !== false && <Testimonials />}
+              {visibleSections?.contact !== false && <Contact />}
+              <Footer />
+            </React.Suspense>
+          </SectionErrorBoundary>
         </main>
       </div>
 
-      {/* Bottom Floating Interactive Dock (The ONLY navigation bar) */}
+      {/* Bottom Floating Interactive Dock */}
       {!isAdminOpen && <Dock />}
 
-      {/* Lazy-Loaded Admin Suite */}
-      <React.Suspense fallback={null}>
-        <AdminLoginModal />
-        <AdminDashboard />
-      </React.Suspense>
+      {/* Lazy-Loaded Admin Suite - Downloaded strictly on-demand when activated */}
+      {(isLoginModalOpen || isAdminOpen) && (
+        <React.Suspense fallback={null}>
+          {isLoginModalOpen && <AdminLoginModal />}
+          {isAdminOpen && isAuthenticated && <AdminDashboard />}
+        </React.Suspense>
+      )}
     </div>
   );
 };
