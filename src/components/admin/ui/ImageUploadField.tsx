@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Upload, Link2, Image, Trash2, CheckCircle2, HardDrive, Sparkles, Loader2 } from 'lucide-react';
-import { formatGoogleDriveUrl } from '../../../utils/driveHelper';
+import { formatGoogleDriveUrl, readFileAsDataUrl } from '../../../utils/driveHelper';
 import { soundManager } from '../../../utils/audio';
 import { compressImageFile, getDataUrlSizeKB } from '../../../utils/imageCompressor';
-import { uploadFileToStorage, db, isFirebaseConfigured } from '../../../lib/firebase';
+import { db, isFirebaseConfigured } from '../../../lib/firebase';
 
 interface ImageUploadFieldProps {
   label: string;
@@ -34,21 +34,10 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
     if (!file) return;
 
     setIsProcessing(true);
-    setStatusMessage(`Uploading & optimizing "${file.name}"...`);
+    setStatusMessage(`Optimizing & saving "${file.name}"...`);
 
     try {
-      // 1. Attempt uploading directly to Firebase Storage first (if configured)
-      const storageUrl = await uploadFileToStorage('avatars', file);
-      if (storageUrl) {
-        onChange(storageUrl);
-        soundManager.playSuccess();
-        setStatusMessage(`Uploaded "${file.name}" to Firebase Cloud Storage!`);
-        setIsProcessing(false);
-        setTimeout(() => setStatusMessage(null), 5000);
-        return;
-      }
-
-      // 2. Fallback / Primary: Compress client-side so it fits cleanly in Firestore (< 1MB document limit)
+      // 1. Client-side compression to lightweight WebP (fits effortlessly in Firestore < 1MB limit with 0 CORS)
       const maxDim = aspectRatio === 'video' ? 1200 : 800;
       const compressedDataUrl = await compressImageFile(file, {
         maxWidth: maxDim,
@@ -75,12 +64,22 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
 
       onChange(compressedDataUrl);
       soundManager.playSuccess();
-      setStatusMessage(`Saved & synced to Firebase Database! (${originalKB} KB ➔ ${newKB} KB WebP)`);
+      setStatusMessage(`Saved & synced to Database! (${originalKB} KB ➔ ${newKB} KB WebP)`);
       setTimeout(() => setStatusMessage(null), 5000);
     } catch (err) {
-      console.error('Failed to process image:', err);
-      soundManager.playClick();
-      setStatusMessage('Failed to process image file. Please try another image.');
+      console.warn('Compression notice, falling back to direct data URL:', err);
+      // Safe fallback: Read raw file directly so the user is NEVER blocked
+      try {
+        const rawDataUrl = await readFileAsDataUrl(file);
+        onChange(rawDataUrl);
+        soundManager.playSuccess();
+        setStatusMessage(`Loaded "${file.name}" into database successfully!`);
+        setTimeout(() => setStatusMessage(null), 5000);
+      } catch (readErr) {
+        console.error('Failed to read image file:', readErr);
+        soundManager.playClick();
+        setStatusMessage('Failed to load image file. Please try another image.');
+      }
     } finally {
       setIsProcessing(false);
     }
