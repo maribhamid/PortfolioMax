@@ -9,6 +9,7 @@ import { Hero } from './components/portfolio/Hero';
 import { ScrollProgress } from './components/ui/ScrollProgress';
 import { Dock } from './components/ui/Dock';
 import { TopHeader } from './components/portfolio/TopHeader';
+import { DesktopTitlebar } from './components/ui/DesktopTitlebar';
 import { soundManager } from './utils/audio';
 
 /**
@@ -140,8 +141,13 @@ const PortfolioContent: React.FC = () => {
   const showMeteors = bgConfig?.meteors ?? settings.showMeteors;
   const showParticles = bgConfig?.particles ?? (settings.particleDensity !== 'off');
 
+  const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+
   return (
-    <div className="relative min-h-screen bg-slate-50 dark:bg-[#090a0f] text-slate-900 dark:text-slate-100 selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden transition-colors duration-300">
+    <div className={`relative min-h-screen bg-slate-50 dark:bg-[#090a0f] text-slate-900 dark:text-slate-100 selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden transition-colors duration-300 ${isElectron ? 'pt-9' : ''}`}>
+      {/* Native Desktop Titlebar (Rendered strictly inside Electron runtime) */}
+      <DesktopTitlebar />
+
       {/* Desktop-only Interactive Cursors (0 CPU/GPU overhead on touch phones) */}
       {!isMobile && <CursorSpotlight />}
       {!isMobile && <InteractiveCursor />}

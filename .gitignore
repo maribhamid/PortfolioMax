@@ -6,6 +6,8 @@ node_modules/
 # Production build output
 dist/
 dist-ssr/
+release/
+dist_electron/
 
 # Environment variables
 .env.local
