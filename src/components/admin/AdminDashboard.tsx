@@ -15,7 +15,9 @@ import {
   BookOpen,
   FileText,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Cloud,
+  CloudUpload
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { HeroEditor } from './editors/HeroEditor';
@@ -62,7 +64,17 @@ const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
 ];
 
 export const AdminDashboard: React.FC = () => {
-  const { isAdminOpen, setIsAdminOpen, isAuthenticated, adminView, setAdminView, logout } = usePortfolio();
+  const {
+    isAdminOpen,
+    setIsAdminOpen,
+    isAuthenticated,
+    adminView,
+    setAdminView,
+    logout,
+    cloudSyncStatus,
+    isCloudConnected,
+    forceSyncToCloud,
+  } = usePortfolio();
   const [activeTab, setActiveTab] = useState<TabKey>('hero');
 
   // Strict Authentication Security Gate: If not authenticated, do not show admin panel
@@ -110,14 +122,58 @@ export const AdminDashboard: React.FC = () => {
                 <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white font-display flex items-center gap-2">
                   Portfolio CMS Control Center
                 </h2>
-                <div className="flex items-center gap-1.5 text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
-                  <span>Real-Time Reactive Sync • Authenticated</span>
+                <div className="flex items-center gap-2 text-[11px] font-mono">
+                  {isCloudConnected ? (
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          cloudSyncStatus === 'synced'
+                            ? 'bg-emerald-500'
+                            : cloudSyncStatus === 'syncing'
+                            ? 'bg-amber-400 animate-ping'
+                            : 'bg-rose-500'
+                        }`}
+                      />
+                      <span
+                        className={
+                          cloudSyncStatus === 'synced'
+                            ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+                            : cloudSyncStatus === 'syncing'
+                            ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                            : 'text-rose-500'
+                        }
+                      >
+                        {cloudSyncStatus === 'synced'
+                          ? 'Firebase Live Cloud Synced'
+                          : cloudSyncStatus === 'syncing'
+                          ? 'Syncing to Firebase...'
+                          : 'Cloud Sync Offline'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                      <span className="w-2 h-2 rounded-full bg-slate-400" />
+                      <span>Local Mode (Connect Firebase in Vercel)</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Cloud Sync manual trigger button */}
+              {isCloudConnected && (
+                <button
+                  onClick={forceSyncToCloud}
+                  disabled={cloudSyncStatus === 'syncing'}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/20 transition-colors disabled:opacity-50"
+                  title="Push current state to Firebase Firestore"
+                >
+                  <CloudUpload className="w-3.5 h-3.5" />
+                  <span>{cloudSyncStatus === 'syncing' ? 'Syncing...' : 'Sync Cloud'}</span>
+                </button>
+              )}
+
               {/* Split screen toggle */}
               <button
                 onClick={() => {

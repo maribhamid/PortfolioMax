@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db, isFirebaseConfigured } from '../lib/firebase';
 import {
   PortfolioData,
   HeroData,
@@ -21,12 +23,36 @@ import { soundManager } from '../utils/audio';
 const STORAGE_KEY = 'portfolio_cms_v3_data';
 const AUTH_SESSION_KEY = 'portfolio_admin_auth';
 
+// Helper to sanitize undefined properties before saving to Firestore
+function cleanUndefined<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanUndefined) as unknown as T;
+  }
+  if (typeof obj === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanUndefined(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
 interface PortfolioContextType {
   data: PortfolioData;
   isAdminOpen: boolean;
   setIsAdminOpen: (open: boolean) => void;
   adminView: 'full' | 'split';
   setAdminView: (view: 'full' | 'split') => void;
+
+  // Cloud Sync
+  cloudSyncStatus: 'synced' | 'syncing' | 'offline' | 'error';
+  lastSyncedAt: Date | null;
+  isCloudConnected: boolean;
+  forceSyncToCloud: () => Promise<void>;
 
   // Authentication
   isAuthenticated: boolean;
@@ -169,14 +195,155 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
 
-  // Sync to local storage
+  // Cloud sync status
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>(() => {
+    return isFirebaseConfigured ? 'syncing' : 'offline';
+  });
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const isRemoteUpdate = useRef<boolean>(false);
+
+  // Real-time Firestore Cloud listener
+  useEffect(() => {
+    if (!db || !isFirebaseConfigured) {
+      setCloudSyncStatus('offline');
+      return;
+    }
+
+    const portfolioDocRef = doc(db, 'portfolio', 'data');
+    setCloudSyncStatus('syncing');
+
+    const unsubscribe = onSnapshot(
+      portfolioDocRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const remoteData = snapshot.data() as Partial<PortfolioData>;
+          isRemoteUpdate.current = true;
+          setData((prev) => {
+            return {
+              ...defaultPortfolioData,
+              ...prev,
+              ...remoteData,
+              hero: {
+                ...defaultPortfolioData.hero,
+                ...prev.hero,
+                ...(remoteData.hero || {}),
+                resume: {
+                  ...defaultPortfolioData.hero.resume,
+                  ...prev.hero.resume,
+                  ...(remoteData.hero?.resume || {}),
+                },
+                ctaPrimary: {
+                  ...defaultPortfolioData.hero.ctaPrimary,
+                  ...prev.hero.ctaPrimary,
+                  ...(remoteData.hero?.ctaPrimary || {}),
+                },
+                ctaSecondary: {
+                  ...defaultPortfolioData.hero.ctaSecondary,
+                  ...prev.hero.ctaSecondary,
+                  ...(remoteData.hero?.ctaSecondary || {}),
+                },
+              },
+              about: { ...defaultPortfolioData.about, ...prev.about, ...(remoteData.about || {}) },
+              projects: Array.isArray(remoteData.projects) ? remoteData.projects : prev.projects,
+              skills: Array.isArray(remoteData.skills) ? remoteData.skills : prev.skills,
+              experience: Array.isArray(remoteData.experience) ? remoteData.experience : prev.experience,
+              testimonials: Array.isArray(remoteData.testimonials) ? remoteData.testimonials : prev.testimonials,
+              contact: {
+                ...defaultPortfolioData.contact,
+                ...prev.contact,
+                ...(remoteData.contact || {}),
+                projectTypes: remoteData.contact?.projectTypes?.length ? remoteData.contact.projectTypes : prev.contact.projectTypes,
+                budgets: remoteData.contact?.budgets?.length ? remoteData.contact.budgets : prev.contact.budgets,
+              },
+              footer: { ...defaultPortfolioData.footer, ...prev.footer, ...(remoteData.footer || {}) },
+              settings: {
+                ...defaultPortfolioData.settings,
+                ...prev.settings,
+                ...(remoteData.settings || {}),
+                visibleSections: {
+                  ...defaultPortfolioData.settings.visibleSections,
+                  ...prev.settings.visibleSections,
+                  ...(remoteData.settings?.visibleSections || {}),
+                },
+                effectsConfig: {
+                  ...defaultPortfolioData.settings.effectsConfig!,
+                  ...prev.settings.effectsConfig,
+                  ...(remoteData.settings?.effectsConfig || {}),
+                },
+              },
+            };
+          });
+          setCloudSyncStatus('synced');
+          setLastSyncedAt(new Date());
+        } else {
+          // Document does not exist yet; initialize cloud document with default data
+          setDoc(portfolioDocRef, cleanUndefined(defaultPortfolioData), { merge: true })
+            .then(() => {
+              setCloudSyncStatus('synced');
+              setLastSyncedAt(new Date());
+            })
+            .catch((err) => {
+              console.warn('Initial Firestore write warning:', err);
+              setCloudSyncStatus('error');
+            });
+        }
+      },
+      (error) => {
+        console.warn('Firestore subscription notice (using offline local mode):', error.message || error);
+        setCloudSyncStatus('offline');
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // Sync to local storage & Cloud Firestore with debouncing
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) {
-      console.error('Failed to persist portfolio data:', e);
+      console.error('Failed to persist portfolio data locally:', e);
     }
+
+    // Skip cloud write if this update was triggered by the remote Firestore snapshot
+    if (isRemoteUpdate.current) {
+      isRemoteUpdate.current = false;
+      return;
+    }
+
+    if (!db || !isFirebaseConfigured) return;
+
+    setCloudSyncStatus('syncing');
+    const firestoreDb = db;
+    const timer = setTimeout(async () => {
+      if (!firestoreDb) return;
+      try {
+        await setDoc(doc(firestoreDb, 'portfolio', 'data'), cleanUndefined(data), { merge: true });
+        setCloudSyncStatus('synced');
+        setLastSyncedAt(new Date());
+      } catch (e) {
+        console.error('Failed to sync changes to Firebase:', e);
+        setCloudSyncStatus('error');
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
   }, [data]);
+
+  const forceSyncToCloud = async () => {
+    if (!db || !isFirebaseConfigured) return;
+    const firestoreDb = db;
+    setCloudSyncStatus('syncing');
+    try {
+      await setDoc(doc(firestoreDb, 'portfolio', 'data'), cleanUndefined(data), { merge: true });
+      setCloudSyncStatus('synced');
+      setLastSyncedAt(new Date());
+      soundManager.playSuccess();
+    } catch (e) {
+      console.error('Manual sync to Firebase failed:', e);
+      setCloudSyncStatus('error');
+    }
+  };
 
   // Sync Light / Dark Mode & Theme on documentElement & body
   useEffect(() => {
@@ -469,6 +636,10 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setIsAdminOpen,
         adminView,
         setAdminView,
+        cloudSyncStatus,
+        lastSyncedAt,
+        isCloudConnected: isFirebaseConfigured,
+        forceSyncToCloud,
         isAuthenticated,
         isLoginModalOpen,
         setIsLoginModalOpen,
