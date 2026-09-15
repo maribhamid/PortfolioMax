@@ -29,16 +29,19 @@ export const MessagesEditor: React.FC = () => {
   } = usePortfolio();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read' | 'urgent'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const urgentMessagesCount = messages.filter((m) => m.priority === 'urgent').length;
 
   // Filter messages
   const filteredMessages = messages.filter((msg) => {
     // Filter mode
     if (filterMode === 'unread' && msg.read) return false;
     if (filterMode === 'read' && !msg.read) return false;
+    if (filterMode === 'urgent' && msg.priority !== 'urgent') return false;
 
     // Search query
     if (!searchQuery.trim()) return true;
@@ -48,7 +51,8 @@ export const MessagesEditor: React.FC = () => {
       msg.email.toLowerCase().includes(q) ||
       msg.message.toLowerCase().includes(q) ||
       msg.projectType.toLowerCase().includes(q) ||
-      msg.budget.toLowerCase().includes(q)
+      (msg.priority && msg.priority.toLowerCase().includes(q)) ||
+      (msg.budget && msg.budget.toLowerCase().includes(q))
     );
   });
 
@@ -88,6 +92,40 @@ export const MessagesEditor: React.FC = () => {
       });
     } catch {
       return 'Recently';
+    }
+  };
+
+  const renderPriorityBadge = (priority?: string) => {
+    switch (priority) {
+      case 'urgent':
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+            Urgent Priority
+          </span>
+        );
+      case 'high':
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            High Priority
+          </span>
+        );
+      case 'low':
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+            Low Priority
+          </span>
+        );
+      case 'medium':
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            Medium Priority
+          </span>
+        );
     }
   };
 
@@ -216,7 +254,7 @@ export const MessagesEditor: React.FC = () => {
         </div>
 
         {/* Filter pills */}
-        <div className="flex items-center gap-1.5 self-start sm:self-auto">
+        <div className="flex items-center gap-1.5 self-start sm:self-auto flex-wrap">
           <button
             onClick={() => setFilterMode('all')}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
@@ -237,6 +275,19 @@ export const MessagesEditor: React.FC = () => {
           >
             Unread ({unreadMessagesCount})
           </button>
+          {urgentMessagesCount > 0 && (
+            <button
+              onClick={() => setFilterMode('urgent')}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                filterMode === 'urgent'
+                  ? 'bg-rose-600 text-white shadow-sm'
+                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 hover:bg-rose-500/20'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+              Urgent ({urgentMessagesCount})
+            </button>
+          )}
           <button
             onClick={() => setFilterMode('read')}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
@@ -269,9 +320,10 @@ export const MessagesEditor: React.FC = () => {
         <div className="space-y-3">
           {filteredMessages.map((msg) => {
             const isDeleting = deletingId === msg.id;
+            const priorityText = (msg.priority || 'medium').toUpperCase();
             const replySubject = encodeURIComponent(`Re: Project Inquiry [${msg.projectType}]`);
             const replyBody = encodeURIComponent(
-              `Hi ${msg.name},\n\nThank you for reaching out regarding your ${msg.projectType} project!\n\nBest regards,\n`
+              `Hi ${msg.name},\n\nThank you for reaching out regarding your ${msg.projectType} inquiry (Priority: ${priorityText})!\n\nBest regards,\n`
             );
             const mailtoUrl = `mailto:${msg.email}?subject=${replySubject}&body=${replyBody}`;
 
@@ -337,9 +389,7 @@ export const MessagesEditor: React.FC = () => {
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
                       {msg.projectType}
                     </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                      {msg.budget}
-                    </span>
+                    {renderPriorityBadge(msg.priority)}
                   </div>
                 </div>
 

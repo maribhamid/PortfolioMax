@@ -212,12 +212,15 @@ export interface PortfolioData {
   settings: SiteSettings;
 }
 
+export type MessagePriority = 'low' | 'medium' | 'high' | 'urgent';
+
 export interface ContactMessage {
   id: string;
   name: string;
   email: string;
   projectType: string;
-  budget: string;
+  priority: MessagePriority;
+  budget?: string;
   message: string;
   createdAt: number; // timestamp in ms
   read: boolean;

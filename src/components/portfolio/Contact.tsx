@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Mail, Send, Copy, Check, Sparkles, MapPin, Clock, Phone, Globe, Loader2 } from 'lucide-react';
 import { GithubIcon, LinkedinIcon, TwitterIcon } from '../ui/SocialIcons';
 import { usePortfolio } from '../../context/PortfolioContext';
+import { MessagePriority } from '../../types/portfolio';
 import { BorderBeam } from '../ui/BorderBeam';
 import { ShimmerButton } from '../ui/ShimmerButton';
 import { ScrollReveal } from '../ui/ScrollReveal';
@@ -17,11 +18,17 @@ export const Contact: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mailtoTriggerUrl, setMailtoTriggerUrl] = useState('');
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    email: string;
+    projectType: string;
+    priority: MessagePriority;
+    message: string;
+  }>({
     name: '',
     email: '',
     projectType: contact.projectTypes[0] || 'Full-Stack Web App',
-    budget: contact.budgets[0] || '$5k - $15k',
+    priority: 'medium',
     message: '',
   });
 
@@ -54,19 +61,19 @@ export const Contact: React.FC = () => {
       name: formData.name.trim(),
       email: formData.email.trim(),
       projectType: formData.projectType,
-      budget: formData.budget,
+      priority: formData.priority,
       message: formData.message.trim(),
     });
 
     // 2. Prepare mailto fallback URL
     const recipientEmail = contact.email || 'maribhamid@gmail.com';
-    const subject = encodeURIComponent(`Project Inquiry: [${formData.projectType}] from ${formData.name}`);
+    const subject = encodeURIComponent(`[${formData.priority.toUpperCase()} PRIORITY] Inquiry: ${formData.projectType} from ${formData.name}`);
     const body = encodeURIComponent(
       `Hi,\n\nYou have received a new inquiry from your portfolio website:\n\n` +
       `• Name: ${formData.name}\n` +
       `• Email: ${formData.email}\n` +
       `• Project Type: ${formData.projectType}\n` +
-      `• Estimated Budget: ${formData.budget}\n\n` +
+      `• Priority: ${formData.priority.toUpperCase()}\n\n` +
       `Message:\n${formData.message}\n\n` +
       `Sent on: ${new Date().toLocaleString()}\n`
     );
@@ -256,7 +263,7 @@ export const Contact: React.FC = () => {
                           name: '',
                           email: '',
                           projectType: contact.projectTypes[0] || 'Full-Stack Web App',
-                          budget: contact.budgets[0] || '$5k - $15k',
+                          priority: 'medium',
                           message: '',
                         });
                       }}
@@ -315,19 +322,21 @@ export const Contact: React.FC = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-mono text-slate-600 dark:text-slate-400 mb-1.5">
-                        ESTIMATED BUDGET
+                      <label className="block text-xs font-mono text-slate-600 dark:text-slate-400 mb-1.5 flex items-center justify-between">
+                        <span>PRIORITY LEVEL</span>
+                        <span className="text-[10px] text-purple-600 dark:text-purple-400 font-sans font-semibold uppercase">
+                          {formData.priority}
+                        </span>
                       </label>
                       <select
-                        value={formData.budget}
-                        onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                        className="w-full bg-white dark:bg-[#0e111d] border border-slate-200/80 dark:border-white/10 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:border-purple-500/60 transition-colors shadow-sm"
+                        value={formData.priority}
+                        onChange={(e) => setFormData({ ...formData, priority: e.target.value as MessagePriority })}
+                        className="w-full bg-white dark:bg-[#0e111d] border border-slate-200/80 dark:border-white/10 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:border-purple-500/60 transition-colors shadow-sm capitalize"
                       >
-                        {contact.budgets.map((b, idx) => (
-                          <option key={idx} value={b}>
-                            {b}
-                          </option>
-                        ))}
+                        <option value="low">🟢 Low — Casual / Inquiring</option>
+                        <option value="medium">🔵 Medium — Standard Timeline</option>
+                        <option value="high">🟠 High — Important / Next Few Weeks</option>
+                        <option value="urgent">🔴 Urgent — Critical / Immediate ASAP</option>
                       </select>
                     </div>
                   </div>

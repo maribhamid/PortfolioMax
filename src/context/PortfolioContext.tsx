@@ -15,7 +15,8 @@ import {
   ColorMode,
   VisibleSections,
   MotionEffectsConfig,
-  ContactMessage
+  ContactMessage,
+  MessagePriority
 } from '../types/portfolio';
 import { defaultPortfolioData } from '../data/defaultData';
 import { soundManager } from '../utils/audio';
@@ -67,7 +68,7 @@ interface PortfolioContextType {
   // Contact Inquiries & Messages
   messages: ContactMessage[];
   unreadMessagesCount: number;
-  sendMessage: (msg: { name: string; email: string; projectType: string; budget: string; message: string }) => Promise<boolean>;
+  sendMessage: (msg: { name: string; email: string; projectType: string; priority: MessagePriority; message: string; budget?: string }) => Promise<boolean>;
   deleteMessage: (id: string) => Promise<boolean>;
   markMessageRead: (id: string, read: boolean) => Promise<boolean>;
   clearAllMessages: () => Promise<boolean>;
@@ -621,8 +622,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     name: string;
     email: string;
     projectType: string;
-    budget: string;
+    priority: MessagePriority;
     message: string;
+    budget?: string;
   }): Promise<boolean> => {
     try {
       const saved = await saveMessageToStorage(msg);
