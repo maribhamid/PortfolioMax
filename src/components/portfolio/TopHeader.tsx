@@ -6,7 +6,7 @@ import { GithubIcon, LinkedinIcon, TwitterIcon } from '../ui/SocialIcons';
 import { soundManager } from '../../utils/audio';
 
 export const TopHeader: React.FC = () => {
-  const { data } = usePortfolio();
+  const { data, downloadResumeFile } = usePortfolio();
   const { hero, contact } = data;
   const [currentTime, setCurrentTime] = useState('');
 
@@ -172,8 +172,14 @@ export const TopHeader: React.FC = () => {
                 target={resumeHref.startsWith('http') || resumeHref.startsWith('data:') ? '_blank' : '_self'}
                 rel="noreferrer"
                 download={hero.resumeFileName || (hero.resumeFile ? 'Resume.pdf' : undefined)}
-                onClick={() => soundManager.playClick()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 transition-all hover:scale-105 active:scale-95 shadow-sm"
+                onClick={async (e) => {
+                  soundManager.playClick();
+                  if (resumeHref.startsWith('firestore://') || (!resumeHref.startsWith('http') && !resumeHref.startsWith('data:'))) {
+                    e.preventDefault();
+                    await downloadResumeFile(hero.resumeFileName);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
                 title="Download / View Resume"
               >
                 <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />

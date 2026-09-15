@@ -17,7 +17,10 @@ import {
   LogOut,
   ShieldCheck,
   Cloud,
-  CloudUpload
+  CloudUpload,
+  DatabaseZap,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { HeroEditor } from './editors/HeroEditor';
@@ -74,8 +77,25 @@ export const AdminDashboard: React.FC = () => {
     cloudSyncStatus,
     isCloudConnected,
     forceSyncToCloud,
+    uploadLocalStorageToDatabase,
   } = usePortfolio();
   const [activeTab, setActiveTab] = useState<TabKey>('hero');
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [isSyncingLocal, setIsSyncingLocal] = useState(false);
+
+  const handleUploadLocalStorage = async () => {
+    setIsSyncingLocal(true);
+    soundManager.playClick();
+    const ok = await uploadLocalStorageToDatabase();
+    setIsSyncingLocal(false);
+    if (ok) {
+      setSyncMessage('Successfully uploaded Profile Photo, Resume & Local Storage data to Cloud Database!');
+      setTimeout(() => setSyncMessage(null), 6000);
+    } else {
+      setSyncMessage('Failed to sync local data to Firebase. Please check connection.');
+      setTimeout(() => setSyncMessage(null), 6000);
+    }
+  };
 
   // Strict Authentication Security Gate: If not authenticated, do not show admin panel
   if (!isAdminOpen || !isAuthenticated) return null;
@@ -161,6 +181,23 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Upload Local Storage to Database button */}
+              {isCloudConnected && (
+                <button
+                  onClick={handleUploadLocalStorage}
+                  disabled={isSyncingLocal || cloudSyncStatus === 'syncing'}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 transition-colors disabled:opacity-50"
+                  title="Upload all local storage content (including Profile Photo & Resume) directly into Firebase Database"
+                >
+                  {isSyncingLocal ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+                  ) : (
+                    <DatabaseZap className="w-3.5 h-3.5 text-emerald-500" />
+                  )}
+                  <span>{isSyncingLocal ? 'Uploading...' : 'Sync Local to Database'}</span>
+                </button>
+              )}
+
               {/* Cloud Sync manual trigger button */}
               {isCloudConnected && (
                 <button
@@ -210,6 +247,22 @@ export const AdminDashboard: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Sync notification banner */}
+          {syncMessage && (
+            <div className="px-6 py-2.5 bg-emerald-500/15 border-b border-emerald-500/20 flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-300 font-mono">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>{syncMessage}</span>
+              </div>
+              <button
+                onClick={() => setSyncMessage(null)}
+                className="p-1 hover:bg-emerald-500/20 rounded text-emerald-700 dark:text-emerald-400"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* Main Workspace Body */}
           <div className="flex-1 flex flex-col sm:flex-row overflow-hidden">

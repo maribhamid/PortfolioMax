@@ -19,6 +19,7 @@ import {
 } from '../types/portfolio';
 import { defaultPortfolioData } from '../data/defaultData';
 import { soundManager } from '../utils/audio';
+import { saveResumeDataUrlToFirestore, downloadOrOpenResume } from '../lib/resumeStorage';
 
 const STORAGE_KEY = 'portfolio_cms_v3_data';
 const AUTH_SESSION_KEY = 'portfolio_admin_auth';
@@ -53,6 +54,8 @@ interface PortfolioContextType {
   lastSyncedAt: Date | null;
   isCloudConnected: boolean;
   forceSyncToCloud: () => Promise<void>;
+  uploadLocalStorageToDatabase: () => Promise<boolean>;
+  downloadResumeFile: (fileName?: string) => Promise<boolean>;
 
   // Authentication
   isAuthenticated: boolean;
@@ -202,7 +205,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const isRemoteUpdate = useRef<boolean>(false);
 
-  // Real-time Firestore Cloud listener
+  // Real-time Firestore Cloud listener with Intelligent Local Preservation
   useEffect(() => {
     if (!db || !isFirebaseConfigured) {
       setCloudSyncStatus('offline');
@@ -219,6 +222,76 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const remoteData = snapshot.data() as Partial<PortfolioData>;
           isRemoteUpdate.current = true;
           setData((prev) => {
+            // Intelligent Merge: Don't wipe local customized avatar or resume if remote only has default placeholders!
+            const isDefaultAvatar = (url?: string) =>
+              !url || (url.includes('unsplash.com') && url.includes('photo-1534528741775'));
+
+            const isDefaultResume = (hero?: HeroData) => {
+              if (!hero) return true;
+              if (hero.resumeFile && hero.resumeFile !== '') return false;
+              const link = hero.resume?.url || hero.resume?.link;
+              return !link || link === '#resume' || link === '';
+            };
+
+            // Avatar resolution
+            let resolvedAvatar = remoteData.hero?.avatarUrl || prev.hero.avatarUrl;
+            let shouldSyncAvatarToCloud = false;
+            if (!isDefaultAvatar(prev.hero.avatarUrl) && isDefaultAvatar(remoteData.hero?.avatarUrl)) {
+              // Local state has custom photo, but remote only has default template! Preserve local!
+              resolvedAvatar = prev.hero.avatarUrl;
+              shouldSyncAvatarToCloud = true;
+            }
+
+            // Resume resolution
+            let resolvedResumeFile = remoteData.hero?.resumeFile || prev.hero.resumeFile;
+            let resolvedResumeFileName = remoteData.hero?.resumeFileName || prev.hero.resumeFileName;
+            let resolvedResume = {
+              ...defaultPortfolioData.hero.resume,
+              ...prev.hero.resume,
+              ...(remoteData.hero?.resume || {}),
+            };
+            let shouldSyncResumeToCloud = false;
+
+            if (!isDefaultResume(prev.hero) && isDefaultResume(remoteData.hero as HeroData)) {
+              // Local has custom resume, remote doesn't! Preserve local!
+              resolvedResumeFile = prev.hero.resumeFile;
+              resolvedResumeFileName = prev.hero.resumeFileName;
+              resolvedResume = { ...prev.hero.resume };
+              shouldSyncResumeToCloud = true;
+            }
+
+            // Auto-migrate preserved local data to Firestore in the background
+            if (shouldSyncAvatarToCloud || shouldSyncResumeToCloud) {
+              setTimeout(async () => {
+                try {
+                  const updates: Record<string, any> = {};
+                  if (shouldSyncAvatarToCloud && resolvedAvatar) {
+                    updates['hero.avatarUrl'] = resolvedAvatar;
+                  }
+                  if (shouldSyncResumeToCloud) {
+                    if (resolvedResumeFile && resolvedResumeFile.startsWith('data:')) {
+                      const res = await saveResumeDataUrlToFirestore(
+                        resolvedResumeFile,
+                        resolvedResumeFileName || 'Resume.pdf'
+                      );
+                      updates['hero.resumeFile'] = res.url;
+                      updates['hero.resumeFileName'] = res.fileName;
+                      updates['hero.resume.url'] = res.url;
+                      updates['hero.resume.link'] = res.url;
+                    } else if (resolvedResumeFile) {
+                      updates['hero.resumeFile'] = resolvedResumeFile;
+                      updates['hero.resumeFileName'] = resolvedResumeFileName;
+                    }
+                  }
+                  if (Object.keys(updates).length > 0) {
+                    await setDoc(portfolioDocRef, updates, { merge: true });
+                  }
+                } catch (e) {
+                  console.warn('Auto-migration to Firestore notice:', e);
+                }
+              }, 800);
+            }
+
             return {
               ...defaultPortfolioData,
               ...prev,
@@ -227,11 +300,10 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 ...defaultPortfolioData.hero,
                 ...prev.hero,
                 ...(remoteData.hero || {}),
-                resume: {
-                  ...defaultPortfolioData.hero.resume,
-                  ...prev.hero.resume,
-                  ...(remoteData.hero?.resume || {}),
-                },
+                avatarUrl: resolvedAvatar,
+                resumeFile: resolvedResumeFile,
+                resumeFileName: resolvedResumeFileName,
+                resume: resolvedResume,
                 ctaPrimary: {
                   ...defaultPortfolioData.hero.ctaPrimary,
                   ...prev.hero.ctaPrimary,
@@ -318,7 +390,33 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const timer = setTimeout(async () => {
       if (!firestoreDb) return;
       try {
-        await setDoc(doc(firestoreDb, 'portfolio', 'data'), cleanUndefined(data), { merge: true });
+        let payloadToSave = { ...data };
+
+        // Safeguard: If resumeFile is large raw Base64 (> 250 KB), offload to chunked storage
+        if (payloadToSave.hero?.resumeFile && payloadToSave.hero.resumeFile.startsWith('data:') && payloadToSave.hero.resumeFile.length > 250000) {
+          try {
+            const uploadRes = await saveResumeDataUrlToFirestore(
+              payloadToSave.hero.resumeFile,
+              payloadToSave.hero.resumeFileName || 'Resume.pdf'
+            );
+            payloadToSave = {
+              ...payloadToSave,
+              hero: {
+                ...payloadToSave.hero,
+                resumeFile: uploadRes.url,
+                resume: {
+                  ...payloadToSave.hero.resume,
+                  url: uploadRes.url,
+                  link: uploadRes.url,
+                }
+              }
+            };
+          } catch (storageErr) {
+            console.warn('Failed to offload large resume to chunked storage:', storageErr);
+          }
+        }
+
+        await setDoc(doc(firestoreDb, 'portfolio', 'data'), cleanUndefined(payloadToSave), { merge: true });
         setCloudSyncStatus('synced');
         setLastSyncedAt(new Date());
       } catch (e) {
@@ -343,6 +441,95 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       console.error('Manual sync to Firebase failed:', e);
       setCloudSyncStatus('error');
     }
+  };
+
+  /**
+   * One-click upload from Local Storage to Cloud Database.
+   * Reads local storage directly, uploads any avatar or resume, and persists to Firestore.
+   */
+  const uploadLocalStorageToDatabase = async (): Promise<boolean> => {
+    if (!db || !isFirebaseConfigured) return false;
+    setCloudSyncStatus('syncing');
+
+    try {
+      let localData: PortfolioData = data;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          localData = {
+            ...defaultPortfolioData,
+            ...parsed,
+            hero: {
+              ...defaultPortfolioData.hero,
+              ...(parsed.hero || {}),
+              resume: {
+                ...defaultPortfolioData.hero.resume,
+                ...(parsed.hero?.resume || {})
+              }
+            }
+          };
+        }
+      } catch {}
+
+      let finalResumeFile = localData.hero?.resumeFile;
+      let finalResumeFileName = localData.hero?.resumeFileName || 'Resume.pdf';
+      let finalResumeUrl = localData.hero?.resume?.url || localData.hero?.resume?.link;
+
+      // If local resume is Base64 data, store cleanly in chunked Firestore storage
+      if (finalResumeFile && finalResumeFile.startsWith('data:')) {
+        const res = await saveResumeDataUrlToFirestore(finalResumeFile, finalResumeFileName);
+        finalResumeFile = res.url;
+        finalResumeUrl = res.url;
+      }
+
+      // If avatar is Base64, mirror to portfolio/avatar
+      if (localData.hero?.avatarUrl && localData.hero.avatarUrl.startsWith('data:')) {
+        try {
+          await setDoc(doc(db, 'portfolio', 'avatar'), {
+            avatarUrl: localData.hero.avatarUrl,
+            updatedAt: Date.now(),
+          }, { merge: true });
+        } catch {}
+      }
+
+      const payload: PortfolioData = {
+        ...localData,
+        hero: {
+          ...localData.hero,
+          avatarUrl: localData.hero.avatarUrl,
+          resumeFile: finalResumeFile,
+          resumeFileName: finalResumeFileName,
+          resume: {
+            ...localData.hero.resume,
+            url: finalResumeUrl,
+            link: finalResumeUrl,
+          }
+        }
+      };
+
+      await setDoc(doc(db, 'portfolio', 'data'), cleanUndefined(payload), { merge: true });
+      setData(payload);
+      setCloudSyncStatus('synced');
+      setLastSyncedAt(new Date());
+      soundManager.playSuccess();
+      return true;
+    } catch (err) {
+      console.error('Failed to upload local storage to database:', err);
+      setCloudSyncStatus('error');
+      soundManager.playClick();
+      return false;
+    }
+  };
+
+  /**
+   * Universal Resume download helper.
+   */
+  const downloadResumeFile = async (fallbackName?: string): Promise<boolean> => {
+    return downloadOrOpenResume(
+      fallbackName || data.hero.resumeFileName || 'Resume.pdf',
+      data.hero.resumeFile || data.hero.resume?.url || data.hero.resume?.link
+    );
   };
 
   // Sync Light / Dark Mode & Theme on documentElement & body
@@ -640,6 +827,8 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         lastSyncedAt,
         isCloudConnected: isFirebaseConfigured,
         forceSyncToCloud,
+        uploadLocalStorageToDatabase,
+        downloadResumeFile,
         isAuthenticated,
         isLoginModalOpen,
         setIsLoginModalOpen,

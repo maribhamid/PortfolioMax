@@ -3,7 +3,7 @@ import { Upload, Link2, Image, Trash2, CheckCircle2, HardDrive, Sparkles, Loader
 import { formatGoogleDriveUrl } from '../../../utils/driveHelper';
 import { soundManager } from '../../../utils/audio';
 import { compressImageFile, getDataUrlSizeKB } from '../../../utils/imageCompressor';
-import { uploadFileToStorage } from '../../../lib/firebase';
+import { uploadFileToStorage, db, isFirebaseConfigured } from '../../../lib/firebase';
 
 interface ImageUploadFieldProps {
   label: string;
@@ -48,7 +48,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         return;
       }
 
-      // 2. Fallback: Compress client-side so it fits in Firestore (< 1MB document limit)
+      // 2. Fallback / Primary: Compress client-side so it fits cleanly in Firestore (< 1MB document limit)
       const maxDim = aspectRatio === 'video' ? 1200 : 800;
       const compressedDataUrl = await compressImageFile(file, {
         maxWidth: maxDim,
@@ -59,9 +59,23 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
       const originalKB = Math.round(file.size / 1024);
       const newKB = getDataUrlSizeKB(compressedDataUrl);
 
+      // If this is an avatar/profile image, mirror directly to portfolio/avatar in Firestore as well
+      const isAvatar = label.toLowerCase().includes('avatar') || label.toLowerCase().includes('profile') || label.toLowerCase().includes('headshot');
+      if (isAvatar && db && isFirebaseConfigured) {
+        try {
+          const { setDoc, doc } = await import('firebase/firestore');
+          await setDoc(doc(db, 'portfolio', 'avatar'), {
+            avatarUrl: compressedDataUrl,
+            updatedAt: Date.now(),
+          }, { merge: true });
+        } catch (e) {
+          console.warn('Avatar mirror sync notice:', e);
+        }
+      }
+
       onChange(compressedDataUrl);
       soundManager.playSuccess();
-      setStatusMessage(`Optimized image (${originalKB} KB ➔ ${newKB} KB) ready for database!`);
+      setStatusMessage(`Saved & synced to Firebase Database! (${originalKB} KB ➔ ${newKB} KB WebP)`);
       setTimeout(() => setStatusMessage(null), 5000);
     } catch (err) {
       console.error('Failed to process image:', err);

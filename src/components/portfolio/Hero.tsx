@@ -21,7 +21,7 @@ const iconMap: Record<string, React.ReactNode> = {
 };
 
 export const Hero: React.FC = () => {
-  const { data } = usePortfolio();
+  const { data, downloadResumeFile } = usePortfolio();
   const { hero } = data;
   const [currentRoleIndex, setCurrentRoleIndex] = useState(0);
 
@@ -185,7 +185,13 @@ export const Hero: React.FC = () => {
                   rel="noreferrer"
                   download={hero.resumeFile ? (hero.resumeFileName || 'resume.pdf') : undefined}
                   onMouseEnter={() => soundManager.playHover()}
-                  onClick={() => soundManager.playClick()}
+                  onClick={async (e) => {
+                    soundManager.playClick();
+                    if (resumeHref.startsWith('firestore://') || (!resumeHref.startsWith('http') && !resumeHref.startsWith('data:'))) {
+                      e.preventDefault();
+                      await downloadResumeFile(hero.resumeFileName);
+                    }
+                  }}
                   className="px-5 py-3 rounded-full text-xs font-semibold text-slate-800 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 shadow-sm transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
