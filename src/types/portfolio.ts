@@ -211,3 +211,15 @@ export interface PortfolioData {
   footer: FooterData;
   settings: SiteSettings;
 }
+
+export interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  projectType: string;
+  budget: string;
+  message: string;
+  createdAt: number; // timestamp in ms
+  read: boolean;
+}
+

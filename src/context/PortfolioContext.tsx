@@ -14,10 +14,19 @@ import {
   AccentTheme,
   ColorMode,
   VisibleSections,
-  MotionEffectsConfig
+  MotionEffectsConfig,
+  ContactMessage
 } from '../types/portfolio';
 import { defaultPortfolioData } from '../data/defaultData';
 import { soundManager } from '../utils/audio';
+import {
+  getLocalMessages,
+  subscribeToMessages,
+  saveMessageToStorage,
+  deleteMessageFromStorage,
+  markMessageReadInStorage,
+  clearAllMessagesFromStorage
+} from '../lib/messagesStorage';
 
 const STORAGE_KEY = 'portfolio_cms_v3_data';
 const AUTH_SESSION_KEY = 'portfolio_admin_auth';
@@ -54,6 +63,14 @@ interface PortfolioContextType {
   forceSyncToCloud: () => Promise<void>;
   uploadLocalStorageToDatabase: () => Promise<boolean>;
   downloadResumeFile: (fileName?: string) => Promise<boolean>;
+
+  // Contact Inquiries & Messages
+  messages: ContactMessage[];
+  unreadMessagesCount: number;
+  sendMessage: (msg: { name: string; email: string; projectType: string; budget: string; message: string }) => Promise<boolean>;
+  deleteMessage: (id: string) => Promise<boolean>;
+  markMessageRead: (id: string, read: boolean) => Promise<boolean>;
+  clearAllMessages: () => Promise<boolean>;
 
   // Authentication
   isAuthenticated: boolean;
@@ -202,6 +219,17 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   });
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const isRemoteUpdate = useRef<boolean>(false);
+
+  // Contact messages state
+  const [messages, setMessages] = useState<ContactMessage[]>(() => getLocalMessages());
+  const unreadMessagesCount = messages.filter((m) => !m.read).length;
+
+  useEffect(() => {
+    const unsub = subscribeToMessages((updated) => {
+      setMessages(updated);
+    });
+    return () => unsub();
+  }, []);
 
   // Real-time Firestore Cloud listener with Intelligent Local Preservation
   useEffect(() => {
@@ -586,6 +614,71 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     );
   };
 
+  /**
+   * Send a new contact inquiry message.
+   */
+  const sendMessage = async (msg: {
+    name: string;
+    email: string;
+    projectType: string;
+    budget: string;
+    message: string;
+  }): Promise<boolean> => {
+    try {
+      const saved = await saveMessageToStorage(msg);
+      setMessages((prev) => [saved, ...prev.filter((m) => m.id !== saved.id)]);
+      soundManager.playSuccess();
+      return true;
+    } catch (e) {
+      console.error('Failed to send message:', e);
+      return false;
+    }
+  };
+
+  /**
+   * Delete a contact inquiry message.
+   */
+  const deleteMessage = async (id: string): Promise<boolean> => {
+    try {
+      await deleteMessageFromStorage(id);
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+      soundManager.playClick();
+      return true;
+    } catch (e) {
+      console.error('Failed to delete message:', e);
+      return false;
+    }
+  };
+
+  /**
+   * Mark message as read or unread.
+   */
+  const markMessageRead = async (id: string, read: boolean): Promise<boolean> => {
+    try {
+      await markMessageReadInStorage(id, read);
+      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, read } : m)));
+      return true;
+    } catch (e) {
+      console.error('Failed to update message read status:', e);
+      return false;
+    }
+  };
+
+  /**
+   * Clear all contact messages.
+   */
+  const clearAllMessages = async (): Promise<boolean> => {
+    try {
+      await clearAllMessagesFromStorage();
+      setMessages([]);
+      soundManager.playClick();
+      return true;
+    } catch (e) {
+      console.error('Failed to clear all messages:', e);
+      return false;
+    }
+  };
+
   // Sync Light / Dark Mode & Theme on documentElement & body
   useEffect(() => {
     const isDark = data.settings.colorMode !== 'light';
@@ -883,6 +976,12 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         forceSyncToCloud,
         uploadLocalStorageToDatabase,
         downloadResumeFile,
+        messages,
+        unreadMessagesCount,
+        sendMessage,
+        deleteMessage,
+        markMessageRead,
+        clearAllMessages,
         isAuthenticated,
         isLoginModalOpen,
         setIsLoginModalOpen,

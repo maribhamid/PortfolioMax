@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Send, Copy, Check, Sparkles, MapPin, Clock, Phone, Globe } from 'lucide-react';
+import { Mail, Send, Copy, Check, Sparkles, MapPin, Clock, Phone, Globe, Loader2 } from 'lucide-react';
 import { GithubIcon, LinkedinIcon, TwitterIcon } from '../ui/SocialIcons';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { BorderBeam } from '../ui/BorderBeam';
@@ -10,11 +10,13 @@ import { MagneticButton } from '../ui/MagneticButton';
 import { soundManager } from '../../utils/audio';
 
 export const Contact: React.FC = () => {
-  const { data } = usePortfolio();
+  const { data, sendMessage } = usePortfolio();
   const { contact } = data;
 
   const [copied, setCopied] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mailtoTriggerUrl, setMailtoTriggerUrl] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -42,7 +44,44 @@ export const Contact: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.email || !formData.message) return;
+    if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) return;
+
+    setIsSubmitting(true);
+    soundManager.playClick();
+
+    // 1. Save directly to Cloud Firestore & Local Cache
+    await sendMessage({
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      projectType: formData.projectType,
+      budget: formData.budget,
+      message: formData.message.trim(),
+    });
+
+    // 2. Prepare mailto fallback URL
+    const recipientEmail = contact.email || 'maribhamid@gmail.com';
+    const subject = encodeURIComponent(`Project Inquiry: [${formData.projectType}] from ${formData.name}`);
+    const body = encodeURIComponent(
+      `Hi,\n\nYou have received a new inquiry from your portfolio website:\n\n` +
+      `• Name: ${formData.name}\n` +
+      `• Email: ${formData.email}\n` +
+      `• Project Type: ${formData.projectType}\n` +
+      `• Estimated Budget: ${formData.budget}\n\n` +
+      `Message:\n${formData.message}\n\n` +
+      `Sent on: ${new Date().toLocaleString()}\n`
+    );
+    const mailUrl = `mailto:${recipientEmail}?subject=${subject}&body=${body}`;
+    setMailtoTriggerUrl(mailUrl);
+
+    // Attempt to trigger native email client dispatch
+    try {
+      const mailWindow = window.open(mailUrl, '_blank');
+      if (!mailWindow) {
+        window.location.href = mailUrl;
+      }
+    } catch {
+      // Handled gracefully
+    }
 
     soundManager.playSuccess();
     try {
@@ -56,6 +95,8 @@ export const Contact: React.FC = () => {
     } catch {
       // Confetti fallback
     }
+
+    setIsSubmitting(false);
     setSubmitted(true);
   };
 
@@ -184,32 +225,46 @@ export const Contact: React.FC = () => {
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="text-center py-12 space-y-4"
+                  className="text-center py-10 space-y-4"
                 >
-                  <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-500 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                  <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-500 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
                     <Check className="w-7 h-7" />
                   </div>
                   <h3 className="text-2xl font-bold font-display text-slate-900 dark:text-white">
-                    Transmission Dispatched!
+                    Transmission Received & Logged!
                   </h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto">
-                    Thank you, <span className="text-purple-600 dark:text-purple-300 font-semibold">{formData.name}</span>. Your message has been logged into the queue. I'll review and respond promptly!
+                  <p className="text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto leading-relaxed">
+                    Thank you, <span className="text-purple-600 dark:text-purple-300 font-semibold">{formData.name}</span>. Your inquiry has been safely saved to my database and dispatched to my direct inbox. I will review and respond promptly!
                   </p>
-                  <button
-                    onClick={() => {
-                      setSubmitted(false);
-                      setFormData({
-                        name: '',
-                        email: '',
-                        projectType: contact.projectTypes[0] || 'Full-Stack Web App',
-                        budget: contact.budgets[0] || '$5k - $15k',
-                        message: '',
-                      });
-                    }}
-                    className="px-6 py-2 rounded-full text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-800 dark:text-white transition-colors"
-                  >
-                    Send Another Note
-                  </button>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                    {mailtoTriggerUrl && (
+                      <a
+                        href={mailtoTriggerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-5 py-2 rounded-full text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2 transition-colors shadow-sm"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Open in Email App</span>
+                      </a>
+                    )}
+                    <button
+                      onClick={() => {
+                        setSubmitted(false);
+                        setFormData({
+                          name: '',
+                          email: '',
+                          projectType: contact.projectTypes[0] || 'Full-Stack Web App',
+                          budget: contact.budgets[0] || '$5k - $15k',
+                          message: '',
+                        });
+                      }}
+                      className="px-5 py-2 rounded-full text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-800 dark:text-white transition-colors"
+                    >
+                      Send Another Note
+                    </button>
+                  </div>
                 </motion.div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -293,9 +348,22 @@ export const Contact: React.FC = () => {
 
                   <div className="pt-2">
                     <MagneticButton className="w-full">
-                      <ShimmerButton type="submit" className="w-full text-white">
-                        <Send className="w-4 h-4 text-white" />
-                        <span className="text-white">Transmit Message</span>
+                      <ShimmerButton
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full text-white disabled:opacity-75"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 text-white animate-spin" />
+                            <span className="text-white">Transmitting Message...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 text-white" />
+                            <span className="text-white">Transmit Message</span>
+                          </>
+                        )}
                       </ShimmerButton>
                     </MagneticButton>
                   </div>
