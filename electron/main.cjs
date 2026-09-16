@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Notification } = require('electron');
 const path = require('path');
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -100,6 +100,27 @@ ipcMain.on('window-close', () => {
 
 ipcMain.handle('is-window-maximized', () => {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow.isMaximized() : false;
+});
+
+ipcMain.on('show-notification', (event, { title, body }) => {
+  try {
+    if (Notification.isSupported()) {
+      const notif = new Notification({
+        title,
+        body,
+        silent: false,
+      });
+      notif.on('click', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.focus();
+        }
+      });
+      notif.show();
+    }
+  } catch (err) {
+    console.error('Native notification error:', err);
+  }
 });
 
 // App lifecycle

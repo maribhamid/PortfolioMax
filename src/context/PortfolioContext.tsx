@@ -50,6 +50,14 @@ function cleanUndefined<T>(obj: T): T {
   return obj;
 }
 
+export interface ActiveInquiryAlert {
+  id: string;
+  title: string;
+  body: string;
+  priority?: MessagePriority;
+  timestamp: number;
+}
+
 interface PortfolioContextType {
   data: PortfolioData;
   isAdminOpen: boolean;
@@ -68,6 +76,8 @@ interface PortfolioContextType {
   // Contact Inquiries & Messages
   messages: ContactMessage[];
   unreadMessagesCount: number;
+  inquiryAlert: ActiveInquiryAlert | null;
+  dismissInquiryAlert: () => void;
   sendMessage: (msg: { name: string; email: string; projectType: string; priority: MessagePriority; message: string; budget?: string }) => Promise<boolean>;
   deleteMessage: (id: string) => Promise<boolean>;
   markMessageRead: (id: string, read: boolean) => Promise<boolean>;
@@ -221,16 +231,118 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const isRemoteUpdate = useRef<boolean>(false);
 
-  // Contact messages state
+  // Contact messages state & real-time notification engine
   const [messages, setMessages] = useState<ContactMessage[]>(() => getLocalMessages());
   const unreadMessagesCount = messages.filter((m) => !m.read).length;
+  const [inquiryAlert, setInquiryAlert] = useState<ActiveInquiryAlert | null>(null);
+
+  const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const isInitialMessagesLoadRef = useRef<boolean>(true);
+  const hasNotifiedInitialUnreadRef = useRef<boolean>(false);
+
+  const dismissInquiryAlert = () => {
+    setInquiryAlert(null);
+  };
+
+  /**
+   * Universal notification dispatcher:
+   * 1. Plays gentle micro-chime sound via Web Audio API.
+   * 2. Displays native OS notification in Electron via window.electronAPI.showNotification.
+   * 3. Displays Web HTML5 Notification in standard browsers if permission granted/requested.
+   * 4. Triggers in-app cyber toast banner.
+   */
+  const triggerNotification = (title: string, body: string, priority?: MessagePriority, id?: string) => {
+    soundManager.playNotification();
+
+    setInquiryAlert({
+      id: id || Date.now().toString(),
+      title,
+      body,
+      priority,
+      timestamp: Date.now(),
+    });
+
+    // Native Electron Desktop Notification
+    try {
+      if (typeof window !== 'undefined' && window.electronAPI?.showNotification) {
+        window.electronAPI.showNotification(title, body);
+      } else if (typeof window !== 'undefined' && 'Notification' in window) {
+        // Standard Web Browser Notification
+        if (Notification.permission === 'granted') {
+          const n = new Notification(title, {
+            body,
+            icon: '/favicon.ico',
+          });
+          n.onclick = () => {
+            window.focus();
+            setIsAdminOpen(true);
+          };
+        } else if (Notification.permission === 'default') {
+          Notification.requestPermission().then((perm) => {
+            if (perm === 'granted') {
+              const n = new Notification(title, {
+                body,
+                icon: '/favicon.ico',
+              });
+              n.onclick = () => {
+                window.focus();
+                setIsAdminOpen(true);
+              };
+            }
+          }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn('Native notification error:', e);
+    }
+  };
 
   useEffect(() => {
     const unsub = subscribeToMessages((updated) => {
+      if (isInitialMessagesLoadRef.current) {
+        updated.forEach((m) => knownMessageIdsRef.current.add(m.id));
+        isInitialMessagesLoadRef.current = false;
+        setMessages(updated);
+        return;
+      }
+
+      // Detect newly arrived messages
+      const newMessages = updated.filter((m) => !knownMessageIdsRef.current.has(m.id));
+      updated.forEach((m) => knownMessageIdsRef.current.add(m.id));
       setMessages(updated);
+
+      // Only notify if there are new incoming messages AND admin is logged in!
+      if (newMessages.length > 0 && isAuthenticated) {
+        const latest = newMessages[0];
+        const extraCount = newMessages.length > 1 ? ` (+${newMessages.length - 1} more)` : '';
+        const priorityLabel = (latest.priority || 'medium').toUpperCase();
+        triggerNotification(
+          `🔔 New Inquiry: ${latest.name}${extraCount}`,
+          `[${priorityLabel} PRIORITY] ${latest.projectType}\n"${latest.message.slice(0, 80)}${latest.message.length > 80 ? '...' : ''}"`,
+          latest.priority,
+          latest.id
+        );
+      }
     });
     return () => unsub();
-  }, []);
+  }, [isAuthenticated]);
+
+  // Alert on existing unread messages when logged in
+  useEffect(() => {
+    if (isAuthenticated && !hasNotifiedInitialUnreadRef.current && !isInitialMessagesLoadRef.current) {
+      const unread = messages.filter((m) => !m.read);
+      if (unread.length > 0) {
+        hasNotifiedInitialUnreadRef.current = true;
+        setTimeout(() => {
+          triggerNotification(
+            `📬 Unread Inquiries Waiting`,
+            `You have ${unread.length} unread ${unread.length === 1 ? 'message' : 'messages'} in your inbox. Click to review.`,
+            unread.some((m) => m.priority === 'urgent') ? 'urgent' : 'medium'
+          );
+        }, 600);
+      }
+    }
+  }, [isAuthenticated, messages]);
 
   // Real-time Firestore Cloud listener with Intelligent Local Preservation
   useEffect(() => {
@@ -731,6 +843,24 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setIsLoginModalOpen(false);
       setIsAdminOpen(true);
       soundManager.playSuccess();
+
+      // Request browser notification permission if not yet decided
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+
+      // Check for unread messages and notify the admin immediately!
+      const unread = messages.filter((m) => !m.read);
+      if (unread.length > 0) {
+        setTimeout(() => {
+          triggerNotification(
+            `📬 Unread Inquiries Waiting`,
+            `You have ${unread.length} unread ${unread.length === 1 ? 'message' : 'messages'} in your inbox. Click to review.`,
+            unread.some((m) => m.priority === 'urgent') ? 'urgent' : 'medium'
+          );
+        }, 500);
+      }
+
       return true;
     }
     soundManager.playClick();
@@ -980,6 +1110,8 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         downloadResumeFile,
         messages,
         unreadMessagesCount,
+        inquiryAlert,
+        dismissInquiryAlert,
         sendMessage,
         deleteMessage,
         markMessageRead,

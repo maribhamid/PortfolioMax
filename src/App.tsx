@@ -10,6 +10,7 @@ import { ScrollProgress } from './components/ui/ScrollProgress';
 import { Dock } from './components/ui/Dock';
 import { TopHeader } from './components/portfolio/TopHeader';
 import { DesktopTitlebar } from './components/ui/DesktopTitlebar';
+import { InquiryNotificationToast } from './components/ui/InquiryNotificationToast';
 import { soundManager } from './utils/audio';
 
 /**
@@ -197,6 +198,9 @@ const PortfolioContent: React.FC = () => {
           {isAdminOpen && isAuthenticated && <AdminDashboard />}
         </React.Suspense>
       )}
+
+      {/* Floating Inquiry Notification Toast for Admin */}
+      <InquiryNotificationToast />
     </div>
   );
 };
