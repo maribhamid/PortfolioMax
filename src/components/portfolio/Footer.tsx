@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUp, Sparkles, Sliders, ShieldCheck } from 'lucide-react';
+import { ArrowUp, Sparkles, Sliders, ShieldCheck, Smartphone } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { soundManager } from '../../utils/audio';
+import { InstallAppModal } from '../ui/InstallAppModal';
 
 export const Footer: React.FC = () => {
   const { data, openAdmin } = usePortfolio();
   const { footer } = data;
   const [time, setTime] = useState('');
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   useEffect(() => {
     const updateTime = () => {
@@ -54,11 +56,24 @@ export const Footer: React.FC = () => {
         </div>
 
         {/* Center: System Status */}
-        <div className="flex items-center gap-4 text-xs font-mono text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center justify-center gap-3 text-xs font-mono text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>{footer.statusText || 'Systems Normal'}</span>
           </div>
+
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              setIsInstallModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 transition-all font-semibold"
+            title="Install on iOS or Android"
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span>Install App (iOS & Android)</span>
+          </button>
+
           <button
             onClick={() => {
               soundManager.playSuccess();
@@ -92,6 +107,9 @@ export const Footer: React.FC = () => {
           <span>{footer.creditText}</span>
         </p>
       </div>
+
+      {/* Direct Mobile App Installation Modal (iOS & Android) */}
+      <InstallAppModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} />
     </footer>
   );
 };
