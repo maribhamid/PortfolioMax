@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getFirestore, initializeFirestore, Firestore } from 'firebase/firestore';
 import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig';
 
@@ -23,7 +23,9 @@ export function getFirebaseApp(): FirebaseApp | null {
   if (!isFirebaseConfigured) return null;
   if (!appInstance) {
     try {
-      appInstance = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+      const apps = getApps();
+      const defaultApp = apps.find((a) => a.name === '[DEFAULT]');
+      appInstance = defaultApp || (apps.length === 0 ? initializeApp(firebaseConfig) : apps[0]);
     } catch (error) {
       console.warn('Failed to initialize Firebase App SDK:', error);
     }
@@ -49,7 +51,9 @@ export function getDb(): Firestore | null {
 // Eager instances for components that need direct references
 if (isFirebaseConfigured) {
   try {
-    appInstance = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    const apps = getApps();
+    const defaultApp = apps.find((a) => a.name === '[DEFAULT]');
+    appInstance = defaultApp || (apps.length === 0 ? initializeApp(firebaseConfig) : apps[0]);
     dbInstance = createFirestoreInstance(appInstance);
   } catch (error) {
     console.warn('Failed to eagerly initialize Firebase:', error);

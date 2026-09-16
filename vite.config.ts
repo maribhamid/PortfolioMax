@@ -18,6 +18,9 @@ export default defineConfig({
       ignored: ['**/release/**', '**/dist_electron/**', '**/dist/**', '**/android/**', '**/ios/**'],
     },
   },
+  optimizeDeps: {
+    entries: ['index.html', 'src/**/*.{ts,tsx}'],
+  },
   build: {
     target: 'es2020',
     cssCodeSplit: true,

@@ -94,6 +94,9 @@ const AdminDashboard = lazyWithRetry(() =>
 const AdminLoginModal = lazyWithRetry(() =>
   import('./components/admin/AdminLoginModal').then((m) => ({ default: m.AdminLoginModal }))
 );
+const InstallAppModal = lazyWithRetry(() =>
+  import('./components/ui/InstallAppModal').then((m) => ({ default: m.InstallAppModal }))
+);
 
 const PortfolioContent: React.FC = () => {
   const {
@@ -105,6 +108,8 @@ const PortfolioContent: React.FC = () => {
     isLoginModalOpen,
     setIsLoginModalOpen,
     isAuthenticated,
+    isInstallModalOpen,
+    setIsInstallModalOpen,
   } = usePortfolio();
   const { settings } = data;
   const { visibleSections } = settings;
@@ -143,6 +148,10 @@ const PortfolioContent: React.FC = () => {
   useEffect(() => {
     initCapacitorNativeMobile({
       onBackButton: () => {
+        if (isInstallModalOpen) {
+          setIsInstallModalOpen(false);
+          return true;
+        }
         if (isLoginModalOpen) {
           setIsLoginModalOpen(false);
           return true;
@@ -154,7 +163,7 @@ const PortfolioContent: React.FC = () => {
         return false;
       },
     });
-  }, [isLoginModalOpen, isAdminOpen, setIsLoginModalOpen, setIsAdminOpen]);
+  }, [isInstallModalOpen, isLoginModalOpen, isAdminOpen, setIsInstallModalOpen, setIsLoginModalOpen, setIsAdminOpen]);
 
   const showGrid = bgConfig?.retroGrid ?? settings.showRetroGrid;
   const showMeteors = bgConfig?.meteors ?? settings.showMeteors;
@@ -219,6 +228,16 @@ const PortfolioContent: React.FC = () => {
 
       {/* Floating Inquiry Notification Toast for Admin */}
       <InquiryNotificationToast />
+
+      {/* Direct Native Install Modal (Root Level: Centered on screen, no parent CSS clipping) */}
+      {isInstallModalOpen && (
+        <React.Suspense fallback={null}>
+          <InstallAppModal
+            isOpen={isInstallModalOpen}
+            onClose={() => setIsInstallModalOpen(false)}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };

@@ -93,6 +93,11 @@ interface PortfolioContextType {
   isLoginModalOpen: boolean;
   setIsLoginModalOpen: (open: boolean) => void;
   openAdmin: () => void;
+
+  // Install App Modal
+  isInstallModalOpen: boolean;
+  setIsInstallModalOpen: (open: boolean) => void;
+  openInstallModal: () => void;
   login: (password: string) => boolean;
   logout: () => void;
   changeAdminPassword: (newPass: string) => void;
@@ -284,6 +289,12 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
+
+  const openInstallModal = () => {
+    soundManager.playClick();
+    setIsInstallModalOpen(true);
+  };
 
   // Cloud sync & Save status
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>(() => {
@@ -1377,6 +1388,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         isLoginModalOpen,
         setIsLoginModalOpen,
         openAdmin,
+        isInstallModalOpen,
+        setIsInstallModalOpen,
+        openInstallModal,
         login,
         logout,
         changeAdminPassword,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Mail,
   Trash2,
@@ -14,7 +14,9 @@ import {
   AlertTriangle,
   Send,
   ExternalLink,
-  MessageSquare
+  MessageSquare,
+  Bell,
+  Volume2
 } from 'lucide-react';
 import { usePortfolio } from '../../../context/PortfolioContext';
 import { soundManager } from '../../../utils/audio';
@@ -33,6 +35,34 @@ export const MessagesEditor: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [notificationPerm, setNotificationPerm] = useState<string>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'denied';
+  });
+
+  const handleRequestNotificationPerm = async () => {
+    soundManager.playClick();
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        setNotificationPerm(perm);
+        if (perm === 'granted') {
+          soundManager.playSuccess();
+          new Notification('🔔 Notifications Active', {
+            body: 'You will now receive desktop alerts for all new incoming inquiries!',
+            icon: '/favicon.ico',
+          });
+        }
+      } catch {}
+    }
+  };
+
+  const handleTestChime = () => {
+    soundManager.playNotification();
+  };
 
   const urgentMessagesCount = messages.filter((m) => m.priority === 'urgent').length;
 
@@ -154,8 +184,28 @@ export const MessagesEditor: React.FC = () => {
           </div>
         </div>
 
-        {messages.length > 0 && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleTestChime}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 flex items-center gap-1.5 transition-colors"
+            title="Test real-time notification alert chime"
+          >
+            <Volume2 className="w-3.5 h-3.5" />
+            <span>Test Chime</span>
+          </button>
+
+          {notificationPerm === 'default' && (
+            <button
+              onClick={handleRequestNotificationPerm}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 transition-colors shadow-sm"
+              title="Enable Windows/Mac desktop notifications for new messages"
+            >
+              <Bell className="w-3.5 h-3.5 animate-pulse" />
+              <span>Enable Desktop Alerts</span>
+            </button>
+          )}
+
+          {messages.length > 0 && (
             <button
               onClick={() => {
                 soundManager.playClick();
@@ -166,8 +216,8 @@ export const MessagesEditor: React.FC = () => {
               <Trash2 className="w-3.5 h-3.5" />
               <span>Clear All</span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Confirmation Modal for Clear All */}

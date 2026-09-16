@@ -12,7 +12,8 @@ import {
   Volume2,
   VolumeX,
   Sliders,
-  Sparkles
+  Sparkles,
+  Download
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { AccentTheme } from '../../types/portfolio';
@@ -94,7 +95,7 @@ const themes: { id: AccentTheme; label: string; color: string }[] = [
 
 export const Dock: React.FC = () => {
   const mouseX = useMotionValue(Infinity);
-  const { data, colorMode, toggleColorMode, toggleSound, openAdmin, setAccentTheme } = usePortfolio();
+  const { data, colorMode, toggleColorMode, toggleSound, openAdmin, openInstallModal, setAccentTheme } = usePortfolio();
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
 
   const scrollTo = (id: string) => {
@@ -230,6 +231,15 @@ export const Dock: React.FC = () => {
           onClick={openAdmin}
         >
           <Sliders className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-500 dark:text-cyan-400" />
+        </DockIcon>
+
+        {/* Download & Install App Trigger */}
+        <DockIcon
+          mouseX={mouseX}
+          label="Download App"
+          onClick={openInstallModal}
+        >
+          <Download className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 dark:text-emerald-400" />
         </DockIcon>
       </motion.div>
     </div>

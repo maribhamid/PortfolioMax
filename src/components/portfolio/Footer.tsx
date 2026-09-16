@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { ArrowUp, Sparkles, Sliders, ShieldCheck, Smartphone } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { soundManager } from '../../utils/audio';
-import { InstallAppModal } from '../ui/InstallAppModal';
 
 export const Footer: React.FC = () => {
-  const { data, openAdmin } = usePortfolio();
+  const { data, openAdmin, openInstallModal } = usePortfolio();
   const { footer } = data;
   const [time, setTime] = useState('');
-  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   useEffect(() => {
     const updateTime = () => {
@@ -63,15 +61,12 @@ export const Footer: React.FC = () => {
           </div>
 
           <button
-            onClick={() => {
-              soundManager.playClick();
-              setIsInstallModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 transition-all font-semibold"
-            title="Install on iOS or Android"
+            onClick={openInstallModal}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 transition-all font-semibold cursor-pointer"
+            title="Download & Install App on Android, iOS, or Windows Desktop"
           >
             <Smartphone className="w-3.5 h-3.5" />
-            <span>Install App (iOS & Android)</span>
+            <span>Install App (Android, iOS & Desktop)</span>
           </button>
 
           <button
@@ -79,7 +74,7 @@ export const Footer: React.FC = () => {
               soundManager.playSuccess();
               openAdmin();
             }}
-            className="flex items-center gap-1.5 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 transition-colors font-semibold"
+            className="flex items-center gap-1.5 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 transition-colors font-semibold cursor-pointer"
           >
             <Sliders className="w-3.5 h-3.5" />
             <span>Edit Sections (CMS)</span>
@@ -90,7 +85,7 @@ export const Footer: React.FC = () => {
         <button
           onClick={scrollToTop}
           onMouseEnter={() => soundManager.playHover()}
-          className="p-3 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white transition-colors flex items-center gap-2 text-xs shadow-sm"
+          className="p-3 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white transition-colors flex items-center gap-2 text-xs shadow-sm cursor-pointer"
           title="Back to top"
         >
           <span>Top</span>
@@ -107,9 +102,6 @@ export const Footer: React.FC = () => {
           <span>{footer.creditText}</span>
         </p>
       </div>
-
-      {/* Direct Mobile App Installation Modal (iOS & Android) */}
-      <InstallAppModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} />
     </footer>
   );
 };

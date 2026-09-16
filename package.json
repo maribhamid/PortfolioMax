@@ -48,6 +48,7 @@
     "@capacitor/ios": "^8.5.2",
     "@capacitor/splash-screen": "^8.0.2",
     "@capacitor/status-bar": "^8.0.3",
+    "@emotion/is-prop-valid": "^1.4.0",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "firebase": "^12.19.0",

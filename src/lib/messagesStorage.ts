@@ -6,11 +6,13 @@ const MESSAGES_STORAGE_KEY = 'portfolio_contact_messages_v1';
 // Read messages from local cache synchronously
 export function getLocalMessages(): ContactMessage[] {
   try {
-    const raw = localStorage.getItem(MESSAGES_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.sort((a, b) => b.createdAt - a.createdAt);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = localStorage.getItem(MESSAGES_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.sort((a, b) => b.createdAt - a.createdAt);
+        }
       }
     }
   } catch (e) {
@@ -22,7 +24,9 @@ export function getLocalMessages(): ContactMessage[] {
 // Persist messages to local storage
 export function setLocalMessages(messages: ContactMessage[]): void {
   try {
-    localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messages));
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messages));
+    }
   } catch (e) {
     console.warn('Failed to save local messages:', e);
   }
@@ -30,6 +34,7 @@ export function setLocalMessages(messages: ContactMessage[]): void {
 
 /**
  * Save a new message to local storage and Cloud Firestore.
+ * Stored securely under the permitted 'portfolio' collection: portfolio/messages
  */
 export async function saveMessageToStorage(
   msg: Omit<ContactMessage, 'id' | 'createdAt' | 'read'>
@@ -42,24 +47,53 @@ export async function saveMessageToStorage(
   };
 
   // 1. Immediately save to local cache
+  pendingMessageIds.add(newMessage.id);
   const current = getLocalMessages();
-  const updated = [newMessage, ...current];
+  const updated = [newMessage, ...current.filter((m) => m.id !== newMessage.id)];
   setLocalMessages(updated);
 
-  // 2. If Firebase is configured, persist to Firestore collection 'messages'
+  // 2. If Firebase is configured, persist to Firestore portfolio/messages
   if (isFirebaseConfigured) {
     try {
-      const [{ doc, setDoc }, { getDb }] = await Promise.all([
+      const [{ doc, getDoc, setDoc }, { getDb }] = await Promise.all([
         import('firebase/firestore'),
         import('./firebase'),
       ]);
       const db = getDb();
       if (db) {
-        await setDoc(doc(db, 'messages', newMessage.id), newMessage);
+        const messagesDocRef = doc(db, 'portfolio', 'messages');
+        const snap = await getDoc(messagesDocRef);
+        let cloudMessages: ContactMessage[] = [];
+        if (snap.exists()) {
+          const d = snap.data();
+          if (Array.isArray(d.messages)) {
+            cloudMessages = d.messages;
+          }
+        }
+        const merged = [newMessage, ...cloudMessages.filter((m) => m.id !== newMessage.id)];
+
+        await setDoc(
+          messagesDocRef,
+          {
+            messages: merged,
+            lastMessageAt: Date.now(),
+            unreadCount: merged.filter((m) => !m.read).length,
+          },
+          { merge: true }
+        );
+
+        // Also save to discrete subcollection document
+        try {
+          await setDoc(doc(db, 'portfolio', 'inquiries', 'items', newMessage.id), newMessage);
+        } catch {}
       }
     } catch (err) {
       console.warn('Failed to sync new message to Firebase Firestore:', err);
+    } finally {
+      pendingMessageIds.delete(newMessage.id);
     }
+  } else {
+    pendingMessageIds.delete(newMessage.id);
   }
 
   return newMessage;
@@ -69,21 +103,38 @@ export async function saveMessageToStorage(
  * Delete a message by ID from both local storage and Firestore.
  */
 export async function deleteMessageFromStorage(id: string): Promise<boolean> {
-  // Update local storage
   const current = getLocalMessages();
   const filtered = current.filter((m) => m.id !== id);
   setLocalMessages(filtered);
 
-  // Delete from Firestore if configured
   if (isFirebaseConfigured) {
     try {
-      const [{ doc, deleteDoc }, { getDb }] = await Promise.all([
+      const [{ doc, getDoc, setDoc, deleteDoc }, { getDb }] = await Promise.all([
         import('firebase/firestore'),
         import('./firebase'),
       ]);
       const db = getDb();
       if (db) {
-        await deleteDoc(doc(db, 'messages', id));
+        const messagesDocRef = doc(db, 'portfolio', 'messages');
+        const snap = await getDoc(messagesDocRef);
+        if (snap.exists()) {
+          const d = snap.data();
+          const cloudMessages: ContactMessage[] = Array.isArray(d.messages) ? d.messages : [];
+          const updatedCloud = cloudMessages.filter((m) => m.id !== id);
+          await setDoc(
+            messagesDocRef,
+            {
+              messages: updatedCloud,
+              lastMessageAt: Date.now(),
+              unreadCount: updatedCloud.filter((m) => !m.read).length,
+            },
+            { merge: true }
+          );
+        }
+
+        try {
+          await deleteDoc(doc(db, 'portfolio', 'inquiries', 'items', id));
+        } catch {}
       }
     } catch (err) {
       console.warn('Failed to delete message from Firestore:', err);
@@ -103,13 +154,31 @@ export async function markMessageReadInStorage(id: string, read: boolean): Promi
 
   if (isFirebaseConfigured) {
     try {
-      const [{ doc, setDoc }, { getDb }] = await Promise.all([
+      const [{ doc, getDoc, setDoc }, { getDb }] = await Promise.all([
         import('firebase/firestore'),
         import('./firebase'),
       ]);
       const db = getDb();
       if (db) {
-        await setDoc(doc(db, 'messages', id), { read }, { merge: true });
+        const messagesDocRef = doc(db, 'portfolio', 'messages');
+        const snap = await getDoc(messagesDocRef);
+        if (snap.exists()) {
+          const d = snap.data();
+          const cloudMessages: ContactMessage[] = Array.isArray(d.messages) ? d.messages : [];
+          const updatedCloud = cloudMessages.map((m) => (m.id === id ? { ...m, read } : m));
+          await setDoc(
+            messagesDocRef,
+            {
+              messages: updatedCloud,
+              unreadCount: updatedCloud.filter((m) => !m.read).length,
+            },
+            { merge: true }
+          );
+        }
+
+        try {
+          await setDoc(doc(db, 'portfolio', 'inquiries', 'items', id), { read }, { merge: true });
+        } catch {}
       }
     } catch (err) {
       console.warn('Failed to update message status in Firestore:', err);
@@ -123,18 +192,25 @@ export async function markMessageReadInStorage(id: string, read: boolean): Promi
  * Clear all messages from local storage and Firestore.
  */
 export async function clearAllMessagesFromStorage(): Promise<boolean> {
-  const current = getLocalMessages();
   setLocalMessages([]);
 
-  if (isFirebaseConfigured && current.length > 0) {
+  if (isFirebaseConfigured) {
     try {
-      const [{ doc, deleteDoc }, { getDb }] = await Promise.all([
+      const [{ doc, setDoc }, { getDb }] = await Promise.all([
         import('firebase/firestore'),
         import('./firebase'),
       ]);
       const db = getDb();
       if (db) {
-        await Promise.all(current.map((m) => deleteDoc(doc(db, 'messages', m.id))));
+        await setDoc(
+          doc(db, 'portfolio', 'messages'),
+          {
+            messages: [],
+            lastMessageAt: Date.now(),
+            unreadCount: 0,
+          },
+          { merge: true }
+        );
       }
     } catch (err) {
       console.warn('Failed to clear messages from Firestore:', err);
@@ -144,8 +220,11 @@ export async function clearAllMessagesFromStorage(): Promise<boolean> {
   return true;
 }
 
+// Track locally pending message IDs to avoid race conditions
+const pendingMessageIds = new Set<string>();
+
 /**
- * Subscribe to messages with instant local cache and live Firestore updates.
+ * Subscribe to messages with instant local cache and live Firestore updates on portfolio/messages.
  */
 export function subscribeToMessages(callback: (messages: ContactMessage[]) => void): () => void {
   // Call immediately with local cache
@@ -160,7 +239,7 @@ export function subscribeToMessages(callback: (messages: ContactMessage[]) => vo
 
   const initFirestoreSubscription = async () => {
     try {
-      const [{ collection, onSnapshot, query, orderBy }, { getDb }] = await Promise.all([
+      const [{ doc, onSnapshot }, { getDb }] = await Promise.all([
         import('firebase/firestore'),
         import('./firebase'),
       ]);
@@ -169,39 +248,28 @@ export function subscribeToMessages(callback: (messages: ContactMessage[]) => vo
       const db = getDb();
       if (!db) return;
 
-      const q = query(collection(db, 'messages'), orderBy('createdAt', 'desc'));
+      const messagesDocRef = doc(db, 'portfolio', 'messages');
 
       unsubscribeFirestore = onSnapshot(
-        q,
+        messagesDocRef,
         (snapshot) => {
           if (!isSubscribed) return;
-          const remoteMessages: ContactMessage[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as Partial<ContactMessage>;
-            remoteMessages.push({
-              id: docSnap.id,
-              name: data.name || 'Anonymous',
-              email: data.email || '',
-              projectType: data.projectType || 'General Inquiry',
-              priority: data.priority || 'medium',
-              budget: data.budget,
-              message: data.message || '',
-              createdAt: data.createdAt || Date.now(),
-              read: Boolean(data.read),
-            });
-          });
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            const remoteMessages: ContactMessage[] = Array.isArray(data.messages) ? data.messages : [];
 
-          // Merge with any offline messages from local cache that may not have synced yet
-          const local = getLocalMessages();
-          const remoteIds = new Set(remoteMessages.map((m) => m.id));
-          const unsynced = local.filter((m) => !remoteIds.has(m.id));
-          const merged = [...remoteMessages, ...unsynced].sort((a, b) => b.createdAt - a.createdAt);
+            // Firestore is the authoritative source for synced messages.
+            // Only keep local messages that are currently pending cloud write.
+            const remoteIds = new Set(remoteMessages.map((m) => m.id));
+            const localPending = getLocalMessages().filter((m) => pendingMessageIds.has(m.id) && !remoteIds.has(m.id));
+            const merged = [...remoteMessages, ...localPending].sort((a, b) => b.createdAt - a.createdAt);
 
-          setLocalMessages(merged);
-          callback(merged);
+            setLocalMessages(merged);
+            callback(merged);
+          }
         },
         (error) => {
-          console.warn('Firestore messages listener notice (using local storage):', error);
+          console.warn('Firestore messages listener notice:', error);
         }
       );
     } catch (err) {

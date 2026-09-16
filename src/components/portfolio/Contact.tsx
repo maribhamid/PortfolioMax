@@ -56,55 +56,50 @@ export const Contact: React.FC = () => {
     setIsSubmitting(true);
     soundManager.playClick();
 
-    // 1. Save directly to Cloud Firestore & Local Cache
-    await sendMessage({
-      name: formData.name.trim(),
-      email: formData.email.trim(),
-      projectType: formData.projectType,
-      priority: formData.priority,
-      message: formData.message.trim(),
-    });
-
-    // 2. Prepare mailto fallback URL
-    const recipientEmail = contact.email || 'maribhamid@gmail.com';
-    const subject = encodeURIComponent(`[${formData.priority.toUpperCase()} PRIORITY] Inquiry: ${formData.projectType} from ${formData.name}`);
-    const body = encodeURIComponent(
-      `Hi,\n\nYou have received a new inquiry from your portfolio website:\n\n` +
-      `• Name: ${formData.name}\n` +
-      `• Email: ${formData.email}\n` +
-      `• Project Type: ${formData.projectType}\n` +
-      `• Priority: ${formData.priority.toUpperCase()}\n\n` +
-      `Message:\n${formData.message}\n\n` +
-      `Sent on: ${new Date().toLocaleString()}\n`
-    );
-    const mailUrl = `mailto:${recipientEmail}?subject=${subject}&body=${body}`;
-    setMailtoTriggerUrl(mailUrl);
-
-    // Attempt to trigger native email client dispatch
     try {
-      const mailWindow = window.open(mailUrl, '_blank');
-      if (!mailWindow) {
-        window.location.href = mailUrl;
-      }
-    } catch {
-      // Handled gracefully
-    }
-
-    soundManager.playSuccess();
-    try {
-      const confetti = (await import('canvas-confetti')).default;
-      confetti({
-        particleCount: 120,
-        spread: 90,
-        origin: { y: 0.7 },
-        colors: ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'],
+      // 1. Save directly to Cloud Firestore & Local Cache in real time
+      await sendMessage({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        projectType: formData.projectType,
+        priority: formData.priority,
+        message: formData.message.trim(),
       });
-    } catch {
-      // Confetti fallback
-    }
 
-    setIsSubmitting(false);
-    setSubmitted(true);
+      // 2. Prepare optional mailto fallback URL
+      const recipientEmail = contact.email || 'maribhamid@gmail.com';
+      const subject = encodeURIComponent(`[${formData.priority.toUpperCase()} PRIORITY] Inquiry: ${formData.projectType} from ${formData.name}`);
+      const body = encodeURIComponent(
+        `Hi,\n\nYou have received a new inquiry from your portfolio website:\n\n` +
+        `• Name: ${formData.name}\n` +
+        `• Email: ${formData.email}\n` +
+        `• Project Type: ${formData.projectType}\n` +
+        `• Priority: ${formData.priority.toUpperCase()}\n\n` +
+        `Message:\n${formData.message}\n\n` +
+        `Sent on: ${new Date().toLocaleString()}\n`
+      );
+      const mailUrl = `mailto:${recipientEmail}?subject=${subject}&body=${body}`;
+      setMailtoTriggerUrl(mailUrl);
+
+      soundManager.playSuccess();
+      try {
+        const confetti = (await import('canvas-confetti')).default;
+        confetti({
+          particleCount: 100,
+          spread: 80,
+          origin: { y: 0.7 },
+          colors: ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'],
+        });
+      } catch {
+        // Confetti fallback
+      }
+
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Failed to submit message:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -237,11 +232,15 @@ export const Contact: React.FC = () => {
                   <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-500 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
                     <Check className="w-7 h-7" />
                   </div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-mono font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Real-Time Cloud Synced • Admin Notified</span>
+                  </div>
                   <h3 className="text-2xl font-bold font-display text-slate-900 dark:text-white">
                     Transmission Received & Logged!
                   </h3>
                   <p className="text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto leading-relaxed">
-                    Thank you, <span className="text-purple-600 dark:text-purple-300 font-semibold">{formData.name}</span>. Your inquiry has been safely saved to my database and dispatched to my direct inbox. I will review and respond promptly!
+                    Thank you, <span className="text-purple-600 dark:text-purple-300 font-semibold">{formData.name}</span>. Your inquiry has been instantly saved to the database and routed straight to my admin panel notification feed.
                   </p>
 
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
@@ -250,10 +249,10 @@ export const Contact: React.FC = () => {
                         href={mailtoTriggerUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-5 py-2 rounded-full text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2 transition-colors shadow-sm"
+                        className="px-5 py-2 rounded-full text-xs font-semibold bg-purple-600/20 hover:bg-purple-600/30 text-purple-700 dark:text-purple-300 border border-purple-500/30 flex items-center gap-2 transition-colors shadow-sm"
                       >
                         <Mail className="w-3.5 h-3.5" />
-                        <span>Open in Email App</span>
+                        <span>Also Send via Mail App (Optional)</span>
                       </a>
                     )}
                     <button

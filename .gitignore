@@ -8,6 +8,10 @@ dist/
 dist-ssr/
 release/
 dist_electron/
+apk/
+*.exe
+public/*.exe
+
 
 # Android & iOS mobile build artifacts
 android/.gradle/
