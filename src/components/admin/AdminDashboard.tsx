@@ -83,10 +83,28 @@ export const AdminDashboard: React.FC = () => {
     forceSyncToCloud,
     uploadLocalStorageToDatabase,
     unreadMessagesCount,
+    saveStatus,
+    lastSavedAt,
+    saveAllChanges,
   } = usePortfolio();
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [isSyncingLocal, setIsSyncingLocal] = useState(false);
+  const [isManualSaving, setIsManualSaving] = useState(false);
+
+  const handleSaveAll = async () => {
+    setIsManualSaving(true);
+    soundManager.playClick();
+    const ok = await saveAllChanges();
+    setIsManualSaving(false);
+    if (ok) {
+      setSyncMessage('All changes successfully saved and synchronized to Cloud Firestore!');
+      setTimeout(() => setSyncMessage(null), 4000);
+    } else {
+      setSyncMessage('Failed to save to cloud. Changes are safely stored in local memory.');
+      setTimeout(() => setSyncMessage(null), 4000);
+    }
+  };
 
   const handleUploadLocalStorage = async () => {
     setIsSyncingLocal(true);
@@ -172,11 +190,48 @@ export const AdminDashboard: React.FC = () => {
                       </span>
                     )}
                   </div>
+                  <span className="text-slate-300 dark:text-slate-700">•</span>
+                  {/* Save Status Badge */}
+                  <div className="flex items-center gap-1">
+                    {saveStatus === 'saving' && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono text-cyan-600 dark:text-cyan-400">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Saving...</span>
+                      </span>
+                    )}
+                    {saveStatus === 'unsaved' && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono text-amber-600 dark:text-amber-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping inline-block" />
+                        <span>Unsaved</span>
+                      </span>
+                    )}
+                    {saveStatus === 'saved' && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Saved</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Primary Save Changes Button */}
+              <button
+                onClick={handleSaveAll}
+                disabled={isManualSaving || saveStatus === 'saving'}
+                title="Immediately save and synchronize all changes to local storage & Firestore"
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-600/25 flex items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+              >
+                {isManualSaving || saveStatus === 'saving' ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                )}
+                <span>Save Changes</span>
+              </button>
+
               {/* Force Cloud Sync Button */}
               {isCloudConnected && (
                 <button

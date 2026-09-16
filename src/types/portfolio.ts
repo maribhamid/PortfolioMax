@@ -201,6 +201,7 @@ export interface SiteSettings {
 }
 
 export interface PortfolioData {
+  _updatedAt?: number;
   hero: HeroData;
   about: AboutData;
   projects: ProjectItem[];

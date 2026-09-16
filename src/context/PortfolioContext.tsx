@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { isFirebaseConfigured } from '../lib/firebaseConfig';
 import {
   PortfolioData,
@@ -58,6 +58,8 @@ export interface ActiveInquiryAlert {
   timestamp: number;
 }
 
+export type SaveStatus = 'saved' | 'saving' | 'unsaved';
+
 interface PortfolioContextType {
   data: PortfolioData;
   isAdminOpen: boolean;
@@ -65,10 +67,13 @@ interface PortfolioContextType {
   adminView: 'full' | 'split';
   setAdminView: (view: 'full' | 'split') => void;
 
-  // Cloud Sync
+  // Cloud Sync & Real-Time Save State
   cloudSyncStatus: 'synced' | 'syncing' | 'offline' | 'error';
   lastSyncedAt: Date | null;
   isCloudConnected: boolean;
+  saveStatus: SaveStatus;
+  lastSavedAt: Date | null;
+  saveAllChanges: () => Promise<boolean>;
   forceSyncToCloud: () => Promise<void>;
   uploadLocalStorageToDatabase: () => Promise<boolean>;
   downloadResumeFile: (fileName?: string) => Promise<boolean>;
@@ -133,17 +138,47 @@ interface PortfolioContextType {
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
 
 export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Initialize state from localStorage with fallback & legacy upgrade
   const [data, setData] = useState<PortfolioData>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+
+        // Upgrade legacy "Alex Vance" template default to "Marib Hamid"
+        const resolvedName =
+          parsed.hero?.name && parsed.hero.name !== 'Alex Vance'
+            ? parsed.hero.name
+            : defaultPortfolioData.hero.name;
+
+        const resolvedProjects =
+          Array.isArray(parsed.projects) && parsed.projects.length > 0
+            ? parsed.projects
+            : defaultPortfolioData.projects;
+
+        const resolvedSkills =
+          Array.isArray(parsed.skills) && parsed.skills.length > 0
+            ? parsed.skills
+            : defaultPortfolioData.skills;
+
+        const resolvedExperience =
+          Array.isArray(parsed.experience) && parsed.experience.length > 0
+            ? parsed.experience
+            : defaultPortfolioData.experience;
+
+        const resolvedTestimonials =
+          Array.isArray(parsed.testimonials) && parsed.testimonials.length > 0
+            ? parsed.testimonials
+            : defaultPortfolioData.testimonials;
+
         return {
           ...defaultPortfolioData,
           ...parsed,
+          _updatedAt: parsed._updatedAt || Date.now(),
           hero: {
             ...defaultPortfolioData.hero,
             ...(parsed.hero || {}),
+            name: resolvedName,
             resume: {
               ...defaultPortfolioData.hero.resume,
               ...(parsed.hero?.resume || {})
@@ -157,18 +192,44 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               ...(parsed.hero?.ctaSecondary || {})
             }
           },
-          about: { ...defaultPortfolioData.about, ...(parsed.about || {}) },
+          about: {
+            ...defaultPortfolioData.about,
+            ...(parsed.about || {}),
+            terminalCmd:
+              parsed.about?.terminalCmd && !parsed.about.terminalCmd.includes('Alex Vance')
+                ? parsed.about.terminalCmd
+                : defaultPortfolioData.about.terminalCmd
+          },
+          projects: resolvedProjects,
+          skills: resolvedSkills,
+          experience: resolvedExperience,
+          testimonials: resolvedTestimonials,
           contact: {
             ...defaultPortfolioData.contact,
             ...(parsed.contact || {}),
-            projectTypes: parsed.contact?.projectTypes?.length ? parsed.contact.projectTypes : defaultPortfolioData.contact.projectTypes,
-            budgets: parsed.contact?.budgets?.length ? parsed.contact.budgets : defaultPortfolioData.contact.budgets,
+            email:
+              parsed.contact?.email && !parsed.contact.email.includes('alex.vance')
+                ? parsed.contact.email
+                : defaultPortfolioData.contact.email,
+            projectTypes: parsed.contact?.projectTypes?.length
+              ? parsed.contact.projectTypes
+              : defaultPortfolioData.contact.projectTypes,
+            budgets: parsed.contact?.budgets?.length
+              ? parsed.contact.budgets
+              : defaultPortfolioData.contact.budgets,
           },
-          footer: { ...defaultPortfolioData.footer, ...(parsed.footer || {}) },
+          footer: {
+            ...defaultPortfolioData.footer,
+            ...(parsed.footer || {}),
+            brandText:
+              parsed.footer?.brandText && parsed.footer.brandText !== 'AV'
+                ? parsed.footer.brandText
+                : defaultPortfolioData.footer.brandText
+          },
           settings: {
             ...defaultPortfolioData.settings,
             ...(parsed.settings || {}),
-            colorMode: parsed.settings?.colorMode || 'dark', // default dark
+            colorMode: parsed.settings?.colorMode || 'dark',
             adminPassword: parsed.settings?.adminPassword || 'admin123',
             visibleSections: {
               ...defaultPortfolioData.settings.visibleSections,
@@ -224,12 +285,21 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
 
-  // Cloud sync status
+  // Cloud sync & Save status
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>(() => {
     return isFirebaseConfigured ? 'syncing' : 'offline';
   });
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const isRemoteUpdate = useRef<boolean>(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(() => new Date());
+
+  // Refs for bulletproof concurrency and conflict resolution
+  const localLastEditedAtRef = useRef<number>(0);
+  const lastSyncedJsonRef = useRef<string>('');
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSavingRef = useRef<boolean>(false);
+  const currentDataRef = useRef<PortfolioData>(data);
+  currentDataRef.current = data;
 
   // Contact messages state & real-time notification engine
   const [messages, setMessages] = useState<ContactMessage[]>(() => getLocalMessages());
@@ -245,11 +315,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   /**
-   * Universal notification dispatcher:
-   * 1. Plays gentle micro-chime sound via Web Audio API.
-   * 2. Displays native OS notification in Electron via window.electronAPI.showNotification.
-   * 3. Displays Web HTML5 Notification in standard browsers if permission granted/requested.
-   * 4. Triggers in-app cyber toast banner.
+   * Universal notification dispatcher
    */
   const triggerNotification = (title: string, body: string, priority?: MessagePriority, id?: string) => {
     soundManager.playNotification();
@@ -262,12 +328,10 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       timestamp: Date.now(),
     });
 
-    // Native Electron Desktop Notification
     try {
       if (typeof window !== 'undefined' && window.electronAPI?.showNotification) {
         window.electronAPI.showNotification(title, body);
       } else if (typeof window !== 'undefined' && 'Notification' in window) {
-        // Standard Web Browser Notification
         if (Notification.permission === 'granted') {
           const n = new Notification(title, {
             body,
@@ -297,6 +361,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  // Subscribe to contact messages
   useEffect(() => {
     const unsub = subscribeToMessages((updated) => {
       if (isInitialMessagesLoadRef.current) {
@@ -306,12 +371,10 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return;
       }
 
-      // Detect newly arrived messages
       const newMessages = updated.filter((m) => !knownMessageIdsRef.current.has(m.id));
       updated.forEach((m) => knownMessageIdsRef.current.add(m.id));
       setMessages(updated);
 
-      // Only notify if there are new incoming messages AND admin is logged in!
       if (newMessages.length > 0 && isAuthenticated) {
         const latest = newMessages[0];
         const extraCount = newMessages.length > 1 ? ` (+${newMessages.length - 1} more)` : '';
@@ -327,7 +390,6 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return () => unsub();
   }, [isAuthenticated]);
 
-  // Alert on existing unread messages when logged in
   useEffect(() => {
     if (isAuthenticated && !hasNotifiedInitialUnreadRef.current && !isInitialMessagesLoadRef.current) {
       const unread = messages.filter((m) => !m.read);
@@ -344,7 +406,182 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [isAuthenticated, messages]);
 
-  // Real-time Firestore Cloud listener with Intelligent Local Preservation
+  /**
+   * Primary Firestore write executor
+   */
+  const persistToFirestore = useCallback(async (dataToPersist: PortfolioData, isExplicitSave = false): Promise<boolean> => {
+    if (!isFirebaseConfigured) {
+      setCloudSyncStatus('offline');
+      setSaveStatus('saved');
+      return true;
+    }
+
+    const payloadString = JSON.stringify(cleanUndefined(dataToPersist));
+    // Avoid redundant network write if already synchronized
+    if (!isExplicitSave && payloadString === lastSyncedJsonRef.current) {
+      setSaveStatus('saved');
+      setCloudSyncStatus('synced');
+      return true;
+    }
+
+    setCloudSyncStatus('syncing');
+    setSaveStatus('saving');
+    isSavingRef.current = true;
+
+    try {
+      const [{ doc, setDoc }, { getDb }, { saveResumeDataUrlToFirestore }] = await Promise.all([
+        import('firebase/firestore'),
+        import('../lib/firebase'),
+        import('../lib/resumeStorage')
+      ]);
+
+      const firestoreDb = getDb();
+      if (!firestoreDb) {
+        setCloudSyncStatus('offline');
+        setSaveStatus('saved');
+        return false;
+      }
+
+      let payload: PortfolioData = { ...dataToPersist };
+
+      // Offload large Base64 resume to chunked Firestore storage
+      if (
+        payload.hero?.resumeFile &&
+        payload.hero.resumeFile.startsWith('data:') &&
+        payload.hero.resumeFile.length > 250000
+      ) {
+        try {
+          const uploadRes = await saveResumeDataUrlToFirestore(
+            payload.hero.resumeFile,
+            payload.hero.resumeFileName || 'Resume.pdf'
+          );
+          payload = {
+            ...payload,
+            hero: {
+              ...payload.hero,
+              resumeFile: uploadRes.url,
+              resume: {
+                ...payload.hero.resume,
+                url: uploadRes.url,
+                link: uploadRes.url,
+              }
+            }
+          };
+        } catch (storageErr) {
+          console.warn('Failed to offload large resume to chunked storage:', storageErr);
+        }
+      }
+
+      const cleaned = cleanUndefined(payload);
+      await setDoc(doc(firestoreDb, 'portfolio', 'data'), cleaned, { merge: true });
+
+      lastSyncedJsonRef.current = JSON.stringify(cleaned);
+      setCloudSyncStatus('synced');
+      setSaveStatus('saved');
+      const now = new Date();
+      setLastSyncedAt(now);
+      setLastSavedAt(now);
+      return true;
+    } catch (e) {
+      console.error('Failed to sync changes to Firebase:', e);
+      setCloudSyncStatus('error');
+      setSaveStatus('unsaved');
+      return false;
+    } finally {
+      isSavingRef.current = false;
+    }
+  }, []);
+
+  /**
+   * Centralized State Updater:
+   * 1. Updates state and stamps _updatedAt.
+   * 2. Immediately writes synchronously to localStorage.
+   * 3. Sets saveStatus to 'unsaved'.
+   * 4. Debounces write to Firestore (400ms).
+   */
+  const updateData = useCallback((updater: (prev: PortfolioData) => PortfolioData) => {
+    localLastEditedAtRef.current = Date.now();
+    setSaveStatus('unsaved');
+
+    setData((prev) => {
+      const next = updater(prev);
+      const withTimestamp: PortfolioData = {
+        ...next,
+        _updatedAt: Date.now()
+      };
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(withTimestamp));
+      } catch (e) {
+        console.error('Failed to persist portfolio data locally:', e);
+      }
+
+      currentDataRef.current = withTimestamp;
+      return withTimestamp;
+    });
+  }, []);
+
+  // Debounced auto-save to Firestore on data changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.error('Failed to persist portfolio data locally:', e);
+    }
+
+    const json = JSON.stringify(cleanUndefined(data));
+    if (json === lastSyncedJsonRef.current) {
+      setSaveStatus('saved');
+      return;
+    }
+
+    setSaveStatus('unsaved');
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      persistToFirestore(data);
+    }, 400);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [data, persistToFirestore]);
+
+  // Flush any pending save on page reload or tab hidden
+  useEffect(() => {
+    const handleFlush = () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentDataRef.current));
+      } catch {}
+      persistToFirestore(currentDataRef.current);
+    };
+
+    window.addEventListener('beforeunload', handleFlush);
+    window.addEventListener('pagehide', handleFlush);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        handleFlush();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleFlush);
+      window.removeEventListener('pagehide', handleFlush);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [persistToFirestore]);
+
+  // Real-time Firestore Cloud listener with Timestamp & Conflict Protection
   useEffect(() => {
     if (!isFirebaseConfigured) {
       setCloudSyncStatus('offline');
@@ -376,11 +613,46 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           portfolioDocRef,
           (snapshot) => {
             if (!isMounted) return;
+
+            // 1. If snapshot has pending local writes, it's echoing this client's uncommitted mutation -> ignore
+            if (snapshot.metadata.hasPendingWrites) {
+              return;
+            }
+
             if (snapshot.exists()) {
               const remoteData = snapshot.data() as Partial<PortfolioData>;
-              isRemoteUpdate.current = true;
+              const remoteUpdatedAt = remoteData._updatedAt || 0;
+              const timeSinceLocalEdit = Date.now() - localLastEditedAtRef.current;
+
               setData((prev) => {
-                // Intelligent Merge: Don't wipe local customized avatar or resume if remote only has default placeholders!
+                const localUpdatedAt = prev._updatedAt || 0;
+
+                // 2. CONFLICT GUARD: If user edited locally in the last 4 seconds or local is newer than remote:
+                if (timeSinceLocalEdit < 4000 || localUpdatedAt > remoteUpdatedAt) {
+                  // Protect local state! Push local state to Firestore so Firestore catches up
+                  setTimeout(() => {
+                    if (isMounted) {
+                      persistToFirestore(currentDataRef.current);
+                    }
+                  }, 400);
+                  return prev;
+                }
+
+                // 3. LEGACY DATA GUARD: If remote has no timestamp or still has placeholder name "Alex Vance"
+                // but local is already "Marib Hamid" or has custom projects:
+                if (
+                  !remoteUpdatedAt ||
+                  (remoteData.hero?.name === 'Alex Vance' && prev.hero.name !== 'Alex Vance')
+                ) {
+                  setTimeout(() => {
+                    if (isMounted) {
+                      persistToFirestore(currentDataRef.current);
+                    }
+                  }, 400);
+                  return prev;
+                }
+
+                // 4. REMOTE IS LEGITIMATELY NEWER: Perform safe intelligent merge
                 const isDefaultAvatar = (url?: string) =>
                   !url || (url.includes('unsplash.com') && url.includes('photo-1534528741775'));
 
@@ -391,16 +663,13 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                   return !link || link === '#resume' || link === '';
                 };
 
-                // Avatar resolution
                 let resolvedAvatar = remoteData.hero?.avatarUrl || prev.hero.avatarUrl;
                 let shouldSyncAvatarToCloud = false;
                 if (!isDefaultAvatar(prev.hero.avatarUrl) && isDefaultAvatar(remoteData.hero?.avatarUrl)) {
-                  // Local state has custom photo, but remote only has default template! Preserve local!
                   resolvedAvatar = prev.hero.avatarUrl;
                   shouldSyncAvatarToCloud = true;
                 }
 
-                // Resume resolution
                 let resolvedResumeFile = remoteData.hero?.resumeFile || prev.hero.resumeFile;
                 let resolvedResumeFileName = remoteData.hero?.resumeFileName || prev.hero.resumeFileName;
                 let resolvedResume = {
@@ -411,14 +680,12 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 let shouldSyncResumeToCloud = false;
 
                 if (!isDefaultResume(prev.hero) && isDefaultResume(remoteData.hero as HeroData)) {
-                  // Local has custom resume, remote doesn't! Preserve local!
                   resolvedResumeFile = prev.hero.resumeFile;
                   resolvedResumeFileName = prev.hero.resumeFileName;
                   resolvedResume = { ...prev.hero.resume };
                   shouldSyncResumeToCloud = true;
                 }
 
-                // Auto-migrate preserved local data to Firestore in the background
                 if (shouldSyncAvatarToCloud || shouldSyncResumeToCloud) {
                   setTimeout(async () => {
                     try {
@@ -450,10 +717,40 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                   }, 800);
                 }
 
-                return {
+                // Array Preservation: Never wipe non-empty arrays with empty arrays
+                const resolvedProjects =
+                  Array.isArray(remoteData.projects) && remoteData.projects.length > 0
+                    ? remoteData.projects
+                    : prev.projects.length > 0
+                    ? prev.projects
+                    : defaultPortfolioData.projects;
+
+                const resolvedSkills =
+                  Array.isArray(remoteData.skills) && remoteData.skills.length > 0
+                    ? remoteData.skills
+                    : prev.skills.length > 0
+                    ? prev.skills
+                    : defaultPortfolioData.skills;
+
+                const resolvedExperience =
+                  Array.isArray(remoteData.experience) && remoteData.experience.length > 0
+                    ? remoteData.experience
+                    : prev.experience.length > 0
+                    ? prev.experience
+                    : defaultPortfolioData.experience;
+
+                const resolvedTestimonials =
+                  Array.isArray(remoteData.testimonials) && remoteData.testimonials.length > 0
+                    ? remoteData.testimonials
+                    : prev.testimonials.length > 0
+                    ? prev.testimonials
+                    : defaultPortfolioData.testimonials;
+
+                const merged: PortfolioData = {
                   ...defaultPortfolioData,
                   ...prev,
                   ...remoteData,
+                  _updatedAt: remoteUpdatedAt || Date.now(),
                   hero: {
                     ...defaultPortfolioData.hero,
                     ...prev.hero,
@@ -474,10 +771,10 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     },
                   },
                   about: { ...defaultPortfolioData.about, ...prev.about, ...(remoteData.about || {}) },
-                  projects: Array.isArray(remoteData.projects) ? remoteData.projects : prev.projects,
-                  skills: Array.isArray(remoteData.skills) ? remoteData.skills : prev.skills,
-                  experience: Array.isArray(remoteData.experience) ? remoteData.experience : prev.experience,
-                  testimonials: Array.isArray(remoteData.testimonials) ? remoteData.testimonials : prev.testimonials,
+                  projects: resolvedProjects,
+                  skills: resolvedSkills,
+                  experience: resolvedExperience,
+                  testimonials: resolvedTestimonials,
                   contact: {
                     ...defaultPortfolioData.contact,
                     ...prev.contact,
@@ -502,15 +799,26 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     },
                   },
                 };
+
+                lastSyncedJsonRef.current = JSON.stringify(cleanUndefined(merged));
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+                } catch {}
+                currentDataRef.current = merged;
+                return merged;
               });
+
               setCloudSyncStatus('synced');
+              setSaveStatus('saved');
               setLastSyncedAt(new Date());
             } else {
-              // Document does not exist yet; initialize cloud document with default data
-              setDoc(portfolioDocRef, cleanUndefined(defaultPortfolioData), { merge: true })
+              // Document does not exist yet; initialize with default data stamped with now
+              const initialPayload = { ...defaultPortfolioData, _updatedAt: Date.now() };
+              setDoc(portfolioDocRef, cleanUndefined(initialPayload), { merge: true })
                 .then(() => {
                   if (isMounted) {
                     setCloudSyncStatus('synced');
+                    setSaveStatus('saved');
                     setLastSyncedAt(new Date());
                   }
                 })
@@ -531,7 +839,6 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     };
 
-    // Defer cloud subscription slightly (150ms) so DOM paint and interactive state are 100% instant on phones
     const initTimer = setTimeout(() => {
       if (isMounted) setupSync();
     }, 150);
@@ -541,101 +848,43 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       clearTimeout(initTimer);
       unsubscribe?.();
     };
-  }, []);
+  }, [persistToFirestore]);
 
-  // Sync to local storage & Cloud Firestore with debouncing
-  useEffect(() => {
+  /**
+   * Explicit Save All Changes action
+   */
+  const saveAllChanges = async (): Promise<boolean> => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentDataRef.current));
     } catch (e) {
-      console.error('Failed to persist portfolio data locally:', e);
+      console.error('Failed to save to localStorage:', e);
     }
 
-    // Skip cloud write if this update was triggered by the remote Firestore snapshot
-    if (isRemoteUpdate.current) {
-      isRemoteUpdate.current = false;
-      return;
+    const ok = await persistToFirestore(currentDataRef.current, true);
+    if (ok) {
+      soundManager.playSuccess();
+    } else {
+      soundManager.playClick();
     }
-
-    if (!isFirebaseConfigured) return;
-
-    setCloudSyncStatus('syncing');
-    const timer = setTimeout(async () => {
-      try {
-        const [{ doc, setDoc }, { getDb }, { saveResumeDataUrlToFirestore }] = await Promise.all([
-          import('firebase/firestore'),
-          import('../lib/firebase'),
-          import('../lib/resumeStorage')
-        ]);
-        const firestoreDb = getDb();
-        if (!firestoreDb) return;
-
-        let payloadToSave = { ...data };
-
-        // Safeguard: If resumeFile is large raw Base64 (> 250 KB), offload to chunked storage
-        if (payloadToSave.hero?.resumeFile && payloadToSave.hero.resumeFile.startsWith('data:') && payloadToSave.hero.resumeFile.length > 250000) {
-          try {
-            const uploadRes = await saveResumeDataUrlToFirestore(
-              payloadToSave.hero.resumeFile,
-              payloadToSave.hero.resumeFileName || 'Resume.pdf'
-            );
-            payloadToSave = {
-              ...payloadToSave,
-              hero: {
-                ...payloadToSave.hero,
-                resumeFile: uploadRes.url,
-                resume: {
-                  ...payloadToSave.hero.resume,
-                  url: uploadRes.url,
-                  link: uploadRes.url,
-                }
-              }
-            };
-          } catch (storageErr) {
-            console.warn('Failed to offload large resume to chunked storage:', storageErr);
-          }
-        }
-
-        await setDoc(doc(firestoreDb, 'portfolio', 'data'), cleanUndefined(payloadToSave), { merge: true });
-        setCloudSyncStatus('synced');
-        setLastSyncedAt(new Date());
-      } catch (e) {
-        console.error('Failed to sync changes to Firebase:', e);
-        setCloudSyncStatus('error');
-      }
-    }, 600);
-
-    return () => clearTimeout(timer);
-  }, [data]);
+    return ok;
+  };
 
   const forceSyncToCloud = async () => {
-    if (!isFirebaseConfigured) return;
-    setCloudSyncStatus('syncing');
-    try {
-      const [{ doc, setDoc }, { getDb }] = await Promise.all([
-        import('firebase/firestore'),
-        import('../lib/firebase')
-      ]);
-      const firestoreDb = getDb();
-      if (!firestoreDb) return;
-
-      await setDoc(doc(firestoreDb, 'portfolio', 'data'), cleanUndefined(data), { merge: true });
-      setCloudSyncStatus('synced');
-      setLastSyncedAt(new Date());
-      soundManager.playSuccess();
-    } catch (e) {
-      console.error('Manual sync to Firebase failed:', e);
-      setCloudSyncStatus('error');
-    }
+    await saveAllChanges();
   };
 
   /**
-   * One-click upload from Local Storage to Cloud Database.
-   * Reads local storage directly, uploads any avatar or resume, and persists to Firestore.
+   * One-click upload from Local Storage to Cloud Database
    */
   const uploadLocalStorageToDatabase = async (): Promise<boolean> => {
     if (!isFirebaseConfigured) return false;
     setCloudSyncStatus('syncing');
+    setSaveStatus('saving');
 
     try {
       const [{ doc, setDoc }, { getDb }, { saveResumeDataUrlToFirestore }] = await Promise.all([
@@ -646,7 +895,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const firestoreDb = getDb();
       if (!firestoreDb) return false;
 
-      let localData: PortfolioData = data;
+      let localData: PortfolioData = currentDataRef.current;
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
@@ -654,6 +903,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           localData = {
             ...defaultPortfolioData,
             ...parsed,
+            _updatedAt: Date.now(),
             hero: {
               ...defaultPortfolioData.hero,
               ...(parsed.hero || {}),
@@ -670,14 +920,12 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       let finalResumeFileName = localData.hero?.resumeFileName || 'Resume.pdf';
       let finalResumeUrl = localData.hero?.resume?.url || localData.hero?.resume?.link;
 
-      // If local resume is Base64 data, store cleanly in chunked Firestore storage
       if (finalResumeFile && finalResumeFile.startsWith('data:')) {
         const res = await saveResumeDataUrlToFirestore(finalResumeFile, finalResumeFileName);
         finalResumeFile = res.url;
         finalResumeUrl = res.url;
       }
 
-      // If avatar is Base64, mirror to portfolio/avatar
       if (localData.hero?.avatarUrl && localData.hero.avatarUrl.startsWith('data:')) {
         try {
           await setDoc(doc(firestoreDb, 'portfolio', 'avatar'), {
@@ -689,6 +937,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const payload: PortfolioData = {
         ...localData,
+        _updatedAt: Date.now(),
         hero: {
           ...localData.hero,
           avatarUrl: localData.hero.avatarUrl,
@@ -702,22 +951,29 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
       };
 
-      await setDoc(doc(firestoreDb, 'portfolio', 'data'), cleanUndefined(payload), { merge: true });
+      const cleaned = cleanUndefined(payload);
+      await setDoc(doc(firestoreDb, 'portfolio', 'data'), cleaned, { merge: true });
       setData(payload);
+      currentDataRef.current = payload;
+      lastSyncedJsonRef.current = JSON.stringify(cleaned);
       setCloudSyncStatus('synced');
-      setLastSyncedAt(new Date());
+      setSaveStatus('saved');
+      const now = new Date();
+      setLastSyncedAt(now);
+      setLastSavedAt(now);
       soundManager.playSuccess();
       return true;
     } catch (err) {
       console.error('Failed to upload local storage to database:', err);
       setCloudSyncStatus('error');
+      setSaveStatus('unsaved');
       soundManager.playClick();
       return false;
     }
   };
 
   /**
-   * Universal Resume download helper.
+   * Universal Resume download helper
    */
   const downloadResumeFile = async (fallbackName?: string): Promise<boolean> => {
     const { downloadOrOpenResume } = await import('../lib/resumeStorage');
@@ -728,7 +984,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   /**
-   * Send a new contact inquiry message.
+   * Send a new contact inquiry message
    */
   const sendMessage = async (msg: {
     name: string;
@@ -750,7 +1006,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   /**
-   * Delete a contact inquiry message.
+   * Delete a contact inquiry message
    */
   const deleteMessage = async (id: string): Promise<boolean> => {
     try {
@@ -765,7 +1021,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   /**
-   * Mark message as read or unread.
+   * Mark message as read or unread
    */
   const markMessageRead = async (id: string, read: boolean): Promise<boolean> => {
     try {
@@ -779,7 +1035,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   /**
-   * Clear all contact messages.
+   * Clear all contact messages
    */
   const clearAllMessages = async (): Promise<boolean> => {
     try {
@@ -844,12 +1100,10 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setIsAdminOpen(true);
       soundManager.playSuccess();
 
-      // Request browser notification permission if not yet decided
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().catch(() => {});
       }
 
-      // Check for unread messages and notify the admin immediately!
       const unread = messages.filter((m) => !m.read);
       if (unread.length > 0) {
         setTimeout(() => {
@@ -910,7 +1164,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const toggleSectionVisibility = (section: keyof VisibleSections) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
       settings: {
         ...prev.settings,
@@ -930,44 +1184,44 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (next) soundManager.playSuccess();
   };
 
-  // Section Updates
+  // Section Updates with updateData wrapper
   const updateHero = (heroUpdates: Partial<HeroData>) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
       hero: { ...prev.hero, ...heroUpdates }
     }));
   };
 
   const updateAbout = (aboutUpdates: Partial<AboutData>) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
       about: { ...prev.about, ...aboutUpdates }
     }));
   };
 
   const updateContact = (contactUpdates: Partial<ContactData>) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
       contact: { ...prev.contact, ...contactUpdates }
     }));
   };
 
   const updateFooter = (footerUpdates: Partial<FooterData>) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
       footer: { ...prev.footer, ...footerUpdates }
     }));
   };
 
   const updateSettings = (updates: Partial<SiteSettings>) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
       settings: { ...prev.settings, ...updates }
     }));
   };
 
   const updateEffectsConfig = (effectsUpdate: Partial<MotionEffectsConfig>) => {
-    setData(prev => {
+    updateData((prev) => {
       const current = prev.settings.effectsConfig || defaultPortfolioData.settings.effectsConfig!;
       return {
         ...prev,
@@ -982,13 +1236,13 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   };
 
-  // Projects
+  // Projects CRUD
   const addProject = (project: Omit<ProjectItem, 'id'>) => {
     const newProject: ProjectItem = {
       ...project,
       id: 'proj-' + Date.now()
     };
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
       projects: [newProject, ...prev.projects]
     }));
@@ -996,27 +1250,27 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateProject = (id: string, updates: Partial<ProjectItem>) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
-      projects: prev.projects.map(p => (p.id === id ? { ...p, ...updates } : p))
+      projects: prev.projects.map((p) => (p.id === id ? { ...p, ...updates } : p))
     }));
   };
 
   const deleteProject = (id: string) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
-      projects: prev.projects.filter(p => p.id !== id)
+      projects: prev.projects.filter((p) => p.id !== id)
     }));
     soundManager.playClick();
   };
 
-  // Skills
+  // Skills CRUD
   const addSkill = (skill: Omit<SkillItem, 'id'>) => {
     const newSkill: SkillItem = {
       ...skill,
       id: 'skill-' + Date.now()
     };
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
       skills: [...prev.skills, newSkill]
     }));
@@ -1024,27 +1278,27 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateSkill = (id: string, updates: Partial<SkillItem>) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
-      skills: prev.skills.map(s => (s.id === id ? { ...s, ...updates } : s))
+      skills: prev.skills.map((s) => (s.id === id ? { ...s, ...updates } : s))
     }));
   };
 
   const deleteSkill = (id: string) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
-      skills: prev.skills.filter(s => s.id !== id)
+      skills: prev.skills.filter((s) => s.id !== id)
     }));
     soundManager.playClick();
   };
 
-  // Experience
+  // Experience CRUD
   const addExperience = (exp: Omit<ExperienceItem, 'id'>) => {
     const newExp: ExperienceItem = {
       ...exp,
       id: 'exp-' + Date.now()
     };
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
       experience: [newExp, ...prev.experience]
     }));
@@ -1052,27 +1306,27 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateExperience = (id: string, updates: Partial<ExperienceItem>) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
-      experience: prev.experience.map(e => (e.id === id ? { ...e, ...updates } : e))
+      experience: prev.experience.map((e) => (e.id === id ? { ...e, ...updates } : e))
     }));
   };
 
   const deleteExperience = (id: string) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
-      experience: prev.experience.filter(e => e.id !== id)
+      experience: prev.experience.filter((e) => e.id !== id)
     }));
     soundManager.playClick();
   };
 
-  // Testimonials
+  // Testimonials CRUD
   const addTestimonial = (item: Omit<TestimonialItem, 'id'>) => {
     const newTestimonial: TestimonialItem = {
       ...item,
       id: 'test-' + Date.now()
     };
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
       testimonials: [newTestimonial, ...prev.testimonials]
     }));
@@ -1080,16 +1334,16 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateTestimonial = (id: string, updates: Partial<TestimonialItem>) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
-      testimonials: prev.testimonials.map(t => (t.id === id ? { ...t, ...updates } : t))
+      testimonials: prev.testimonials.map((t) => (t.id === id ? { ...t, ...updates } : t))
     }));
   };
 
   const deleteTestimonial = (id: string) => {
-    setData(prev => ({
+    updateData((prev) => ({
       ...prev,
-      testimonials: prev.testimonials.filter(t => t.id !== id)
+      testimonials: prev.testimonials.filter((t) => t.id !== id)
     }));
     soundManager.playClick();
   };
@@ -1105,6 +1359,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         cloudSyncStatus,
         lastSyncedAt,
         isCloudConnected: isFirebaseConfigured,
+        saveStatus,
+        lastSavedAt,
+        saveAllChanges,
         forceSyncToCloud,
         uploadLocalStorageToDatabase,
         downloadResumeFile,
