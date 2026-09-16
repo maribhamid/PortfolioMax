@@ -9,6 +9,23 @@ dist-ssr/
 release/
 dist_electron/
 
+# Android & iOS mobile build artifacts
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/
+android/*.iml
+android/app/*.iml
+android/local.properties
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+
+ios/App/Pods/
+ios/App/Podfile.lock
+ios/DerivedData/
+ios/.build/
+
 # Environment variables
 .env.local
 .env.*.local

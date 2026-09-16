@@ -15,7 +15,7 @@ export default defineConfig({
     port: 3000,
     open: false,
     watch: {
-      ignored: ['**/release/**', '**/dist_electron/**', '**/dist/**'],
+      ignored: ['**/release/**', '**/dist_electron/**', '**/dist/**', '**/android/**', '**/ios/**'],
     },
   },
   build: {

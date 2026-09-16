@@ -11,6 +11,7 @@ import { Dock } from './components/ui/Dock';
 import { TopHeader } from './components/portfolio/TopHeader';
 import { DesktopTitlebar } from './components/ui/DesktopTitlebar';
 import { InquiryNotificationToast } from './components/ui/InquiryNotificationToast';
+import { initCapacitorNativeMobile } from './utils/capacitorMobile';
 import { soundManager } from './utils/audio';
 
 /**
@@ -102,6 +103,7 @@ const PortfolioContent: React.FC = () => {
     adminView,
     openAdmin,
     isLoginModalOpen,
+    setIsLoginModalOpen,
     isAuthenticated,
   } = usePortfolio();
   const { settings } = data;
@@ -137,6 +139,22 @@ const PortfolioContent: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isAdminOpen, setIsAdminOpen, openAdmin]);
+
+  useEffect(() => {
+    initCapacitorNativeMobile({
+      onBackButton: () => {
+        if (isLoginModalOpen) {
+          setIsLoginModalOpen(false);
+          return true;
+        }
+        if (isAdminOpen) {
+          setIsAdminOpen(false);
+          return true;
+        }
+        return false;
+      },
+    });
+  }, [isLoginModalOpen, isAdminOpen, setIsLoginModalOpen, setIsAdminOpen]);
 
   const showGrid = bgConfig?.retroGrid ?? settings.showRetroGrid;
   const showMeteors = bgConfig?.meteors ?? settings.showMeteors;
