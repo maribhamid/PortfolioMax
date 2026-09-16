@@ -1,11 +1,23 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, Firestore } from 'firebase/firestore';
 import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig';
 
 export { isFirebaseConfigured };
 
 let appInstance: FirebaseApp | null = null;
 let dbInstance: Firestore | null = null;
+
+function createFirestoreInstance(app: FirebaseApp): Firestore {
+  try {
+    // In Capacitor / Android WebView, long-polling auto-detection is essential
+    // to prevent gRPC streaming hangs on https://localhost
+    return initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+    });
+  } catch {
+    return getFirestore(app);
+  }
+}
 
 export function getFirebaseApp(): FirebaseApp | null {
   if (!isFirebaseConfigured) return null;
@@ -25,7 +37,7 @@ export function getDb(): Firestore | null {
     const initializedApp = getFirebaseApp();
     if (initializedApp) {
       try {
-        dbInstance = getFirestore(initializedApp);
+        dbInstance = createFirestoreInstance(initializedApp);
       } catch (error) {
         console.warn('Failed to initialize Firestore SDK:', error);
       }
@@ -38,7 +50,7 @@ export function getDb(): Firestore | null {
 if (isFirebaseConfigured) {
   try {
     appInstance = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    dbInstance = getFirestore(appInstance);
+    dbInstance = createFirestoreInstance(appInstance);
   } catch (error) {
     console.warn('Failed to eagerly initialize Firebase:', error);
   }
