@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 
 const iconBuffer = fs.readFileSync('public/apple-touch-icon.png');
 const iconBase64 = iconBuffer.toString('base64');
@@ -40,7 +40,7 @@ ${iconBase64}
             <key>Precomposed</key>
             <true/>
             <key>URL</key>
-            <string>https://portfolio-max-three.vercel.app</string>
+            <string>${process.env.APP_URL || 'https://portfoliomax.vercel.app'}</string>
         </dict>
     </array>
     <key>PayloadDescription</key>

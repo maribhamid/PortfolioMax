@@ -10,6 +10,38 @@ interface InstallAppModalProps {
 
 export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<'ios' | 'android'>('ios');
+  const [appUrl, setAppUrl] = useState(() => (typeof window !== 'undefined' ? window.location.origin : 'https://portfoliomax.vercel.app'));
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleDownloadProfile = async () => {
+    soundManager.playClick();
+    setIsGenerating(true);
+    try {
+      const res = await fetch('/Marib-Portfolio.mobileconfig');
+      let configText = await res.text();
+      const targetUrl = appUrl.trim() || (typeof window !== 'undefined' ? window.location.origin : 'https://portfoliomax.vercel.app');
+      
+      // Dynamically inject the exact current domain/URL
+      configText = configText.replace(
+        /<key>URL<\/key>\s*<string>[^<]*<\/string>/,
+        `<key>URL</key>\n            <string>${targetUrl}</string>`
+      );
+
+      const blob = new Blob([configText], { type: 'application/x-apple-aspen-config' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Marib-Portfolio.mobileconfig';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      window.location.href = '/Marib-Portfolio.mobileconfig';
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Install Native Mobile App" maxWidth="max-w-xl">
@@ -49,55 +81,87 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
         {/* iOS Content */}
         {activeTab === 'ios' && (
           <div className="space-y-4">
-            {/* Method 1: Direct Profile Install */}
+            {/* Method 1: Instant Safari Add to Home Screen (RECOMMENDED) */}
+            <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-transparent border border-cyan-500/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <Share2 className="w-4 h-4 text-cyan-400" />
+                  Option 1: Safari "Add to Home Screen" (Recommended)
+                </h4>
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold">
+                  100% Identical to WebApp
+                </span>
+              </div>
+              <p className="text-xs text-slate-300">
+                Installs this exact portfolio &amp; Admin Suite as a standalone iOS app on your home screen with zero browser bars:
+              </p>
+              <div className="p-3 rounded-lg bg-black/40 border border-white/5 text-xs text-slate-300 space-y-1.5">
+                <p className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center text-[11px] font-bold shrink-0">1</span>
+                  <span>In Safari on iPhone, tap the <strong>Share</strong> button (square with arrow pointing up).</span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center text-[11px] font-bold shrink-0">2</span>
+                  <span>Scroll down and tap <strong>Add to Home Screen</strong>.</span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center text-[11px] font-bold shrink-0">3</span>
+                  <span>Tap <strong>Add</strong> in the top right. It installs directly to your home screen!</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Method 2: Direct iOS Profile Install (.mobileconfig) */}
             <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 space-y-3">
               <div>
                 <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-purple-400" />
-                  Option 1: Direct 1-Tap iOS Install (.mobileconfig)
+                  Option 2: Direct iOS Profile Download (.mobileconfig)
                 </h4>
                 <p className="text-xs text-slate-300 mt-1">
-                  Installs Marib Portfolio directly onto your iOS home screen as a standalone full-screen app. No Mac or App Store needed.
+                  Generates an Apple Configuration Profile that pins your live portfolio app to your iPhone home screen.
                 </p>
               </div>
 
-              <a
-                href="/Marib-Portfolio.mobileconfig"
-                download="Marib-Portfolio.mobileconfig"
-                onClick={() => soundManager.playClick()}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md shadow-purple-600/30"
+              {/* URL Confirmation Input */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-mono text-slate-400">
+                  Target App URL:
+                </label>
+                <input
+                  type="url"
+                  value={appUrl}
+                  onChange={(e) => setAppUrl(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-lg bg-black/50 border border-white/10 text-xs font-mono text-purple-200 focus:outline-none focus:border-purple-500"
+                  placeholder="https://your-domain.vercel.app"
+                />
+              </div>
+
+              <button
+                onClick={handleDownloadProfile}
+                disabled={isGenerating}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md shadow-purple-600/30 cursor-pointer disabled:opacity-50"
               >
                 <Download className="w-4 h-4" />
-                <span>Download iOS App Profile (.mobileconfig)</span>
-              </a>
+                <span>{isGenerating ? 'Generating Profile...' : 'Download iOS Profile (.mobileconfig)'}</span>
+              </button>
 
               <div className="p-2.5 rounded-lg bg-black/40 border border-white/5 text-[11px] text-slate-400 space-y-1">
-                <p className="font-semibold text-purple-300">How to install on iPhone:</p>
-                <p>1. Tap the button above to download the profile in Safari.</p>
-                <p>2. Open iPhone <strong>Settings</strong> &gt; tap <strong>Profile Downloaded</strong> (or General &gt; VPN &amp; Device Management).</p>
-                <p>3. Tap <strong>Install</strong> in the top-right corner. The app icon appears on your home screen!</p>
+                <p className="font-semibold text-purple-300">How to install profile on iPhone:</p>
+                <p>1. Tap download above in Safari and tap <strong>Allow</strong>.</p>
+                <p>2. Open iPhone <strong>Settings</strong> &gt; tap <strong>Profile Downloaded</strong> (at the top).</p>
+                <p>3. Tap <strong>Install</strong> in the top-right corner.</p>
               </div>
-            </div>
-
-            {/* Method 2: Safari Add to Home Screen */}
-            <div className="p-4 rounded-xl bg-slate-900/40 border border-white/10 space-y-2.5">
-              <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-                <Share2 className="w-4 h-4 text-cyan-400" />
-                Option 2: Instant Safari "Add to Home Screen"
-              </h4>
-              <p className="text-xs text-slate-400">
-                In Safari on your iPhone, tap the <strong>Share</strong> button (box with up arrow), scroll down, and tap <strong>Add to Home Screen</strong>.
-              </p>
             </div>
 
             {/* Method 3: Native IPA Package via GitHub Actions */}
             <div className="p-4 rounded-xl bg-slate-900/40 border border-white/10 space-y-2.5">
               <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                Option 3: Native iOS IPA Package (AltStore / Sideloadly)
+                Option 3: Native iOS IPA Package (Xcode / AltStore / Sideloadly)
               </h4>
               <p className="text-xs text-slate-400">
-                GitHub Actions automatically builds the compiled native Xcode <code className="text-emerald-400">Marib-Portfolio.ipa</code> package on macOS runners.
+                GitHub Actions automatically compiles the native Xcode <code className="text-emerald-400">Marib-Portfolio.ipa</code> on macOS cloud runners.
               </p>
               <a
                 href="https://github.com/maribhamid/PortfolioMax/actions"

@@ -35,7 +35,7 @@ iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFn
             <key>Precomposed</key>
             <true/>
             <key>URL</key>
-            <string>https://portfolio-max-three.vercel.app</string>
+            <string>https://portfoliomax.vercel.app</string>
         </dict>
     </array>
     <key>PayloadDescription</key>

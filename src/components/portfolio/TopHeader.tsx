@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, MapPin, Clock, FileText, Globe, Mail } from 'lucide-react';
+import { Sparkles, MapPin, Clock, FileText, Globe, Mail, Sliders } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { GithubIcon, LinkedinIcon, TwitterIcon } from '../ui/SocialIcons';
 import { soundManager } from '../../utils/audio';
 
 export const TopHeader: React.FC = () => {
-  const { data, downloadResumeFile } = usePortfolio();
+  const { data, downloadResumeFile, openAdmin } = usePortfolio();
   const { hero, contact } = data;
   const [currentTime, setCurrentTime] = useState('');
 
@@ -165,7 +165,7 @@ export const TopHeader: React.FC = () => {
                 rel="noopener noreferrer"
                 onClick={() => soundManager.playClick()}
                 className={`items-center gap-1.5 p-1.5 sm:px-3 sm:py-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 hover:text-slate-900 dark:text-slate-200 dark:hover:text-white border border-slate-200/90 dark:border-white/10 text-xs font-semibold transition-all hover:scale-105 active:scale-95 shadow-sm shrink-0 ${
-                  idx === 0 ? 'hidden xs:flex' : 'hidden sm:flex'
+                  idx === 0 ? 'hidden md:flex' : 'hidden lg:flex'
                 }`}
                 title={`Open ${social.platform}`}
               >
@@ -195,6 +195,19 @@ export const TopHeader: React.FC = () => {
                 <span className="text-[11px] font-bold">Resume</span>
               </a>
             )}
+
+            {/* Admin CMS Trigger Button (Prominently accessible on all devices) */}
+            <button
+              onClick={() => {
+                soundManager.playSuccess();
+                openAdmin();
+              }}
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30 transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer shrink-0"
+              title="Open Admin CMS Studio"
+            >
+              <Sliders className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+              <span className="text-[11px] font-bold">Admin</span>
+            </button>
           </div>
 
         </div>
