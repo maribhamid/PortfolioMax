@@ -67,21 +67,28 @@ export const TopHeader: React.FC = () => {
     return <Globe className="w-4 h-4 text-indigo-400" />;
   };
 
+  const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-30 pointer-events-none transition-all duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 sm:pt-4">
-        <div className="flex items-center justify-between pointer-events-auto px-3.5 sm:px-6 py-2.5 rounded-2xl sm:rounded-full bg-white/80 dark:bg-[#090b14]/85 backdrop-blur-xl border border-slate-200/90 dark:border-white/10 shadow-lg shadow-slate-200/20 dark:shadow-black/40">
+    <header
+      style={{
+        paddingTop: isElectron ? '0px' : 'env(safe-area-inset-top, 0px)'
+      }}
+      className={`fixed ${isElectron ? 'top-9' : 'top-0'} left-0 right-0 z-30 pointer-events-none transition-all duration-300`}
+    >
+      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 pt-2 sm:pt-4">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-4 pointer-events-auto px-2.5 sm:px-6 py-1.5 sm:py-2.5 rounded-2xl sm:rounded-full bg-white/85 dark:bg-[#090b14]/85 backdrop-blur-xl border border-slate-200/90 dark:border-white/10 shadow-lg shadow-slate-200/20 dark:shadow-black/40 min-w-0">
           
           {/* LEFT: Interactive Brand Logo & Name */}
           <div
             onClick={() => scrollTo('hero')}
-            className="flex items-center gap-3 cursor-pointer group select-none shrink-0"
+            className="flex items-center gap-1.5 sm:gap-3 cursor-pointer group select-none min-w-0 shrink"
             title="Scroll to top"
           >
             {/* Monogram Logo Avatar */}
-            <div className="relative">
+            <div className="relative shrink-0">
               {hero.avatarUrl ? (
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden p-[1.5px] bg-gradient-to-tr from-purple-600 via-indigo-500 to-cyan-400 group-hover:scale-105 transition-transform duration-300 shadow-md">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden p-[1.5px] bg-gradient-to-tr from-purple-600 via-indigo-500 to-cyan-400 group-hover:scale-105 transition-transform duration-300 shadow-md">
                   <img
                     src={hero.avatarUrl}
                     alt={hero.name}
@@ -93,7 +100,7 @@ export const TopHeader: React.FC = () => {
                   />
                 </div>
               ) : (
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-cyan-500 p-[1.5px] group-hover:scale-105 transition-transform duration-300 shadow-md">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-cyan-500 p-[1.5px] group-hover:scale-105 transition-transform duration-300 shadow-md">
                   <div className="w-full h-full bg-slate-900 rounded-[10px] flex items-center justify-center font-display font-extrabold text-white text-xs sm:text-sm tracking-wider">
                     {initials}
                   </div>
@@ -107,12 +114,12 @@ export const TopHeader: React.FC = () => {
             </div>
 
             {/* Name and Subtitle */}
-            <div className="flex flex-col">
-              <span className="font-display font-bold text-sm sm:text-base text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors tracking-tight flex items-center gap-1.5">
-                <span>{hero.name}</span>
-                <Sparkles className="w-3 h-3 text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="flex flex-col min-w-0">
+              <span className="font-display font-bold text-xs sm:text-base text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors tracking-tight flex items-center gap-1 sm:gap-1.5 truncate">
+                <span className="truncate">{hero.name}</span>
+                <Sparkles className="w-3 h-3 text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 hidden sm:inline" />
               </span>
-              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate max-w-[120px] sm:max-w-none">
+              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate max-w-[75px] xs:max-w-[120px] sm:max-w-none">
                 {hero.roles?.[0] || 'Software Architect'}
               </span>
             </div>
@@ -148,16 +155,18 @@ export const TopHeader: React.FC = () => {
           </div>
 
           {/* RIGHT: Explicit Link Pills with Icons & Labels (No 'Let's Talk') */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {/* Social Links with Clear Icons & Labels */}
-            {contact.socials?.map((social) => (
+            {contact.socials?.map((social, idx) => (
               <a
                 key={social.id}
                 href={social.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => soundManager.playClick()}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 hover:text-slate-900 dark:text-slate-200 dark:hover:text-white border border-slate-200/90 dark:border-white/10 text-xs font-semibold transition-all hover:scale-105 active:scale-95 shadow-sm"
+                className={`items-center gap-1.5 p-1.5 sm:px-3 sm:py-1.5 rounded-full bg-slate-100 hover:bg-slate-200/80 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 hover:text-slate-900 dark:text-slate-200 dark:hover:text-white border border-slate-200/90 dark:border-white/10 text-xs font-semibold transition-all hover:scale-105 active:scale-95 shadow-sm shrink-0 ${
+                  idx === 0 ? 'hidden xs:flex' : 'hidden sm:flex'
+                }`}
                 title={`Open ${social.platform}`}
               >
                 {getPlatformIcon(social.platform)}
@@ -179,10 +188,10 @@ export const TopHeader: React.FC = () => {
                     await downloadResumeFile(hero.resumeFileName);
                   }
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer shrink-0"
                 title="Download / View Resume"
               >
-                <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span className="text-[11px] font-bold">Resume</span>
               </a>
             )}

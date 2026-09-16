@@ -9,8 +9,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 1024,
-    minHeight: 700,
+    minWidth: 400,
+    minHeight: 500,
     title: 'Marib Hamid | Portfolio Studio',
     backgroundColor: '#0a0d14',
     show: false, // Shown once ready-to-show to prevent blank flash

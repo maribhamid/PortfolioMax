@@ -150,35 +150,35 @@ export const Hero: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="flex flex-wrap items-center gap-4 mb-10"
+            className="flex flex-wrap items-center gap-3 sm:gap-4 mb-10 max-w-full"
           >
             {hero.ctaPrimary?.show && (
-              <MagneticButton>
+              <MagneticButton className="max-w-full">
                 <ShimmerButton
                   onClick={() => scrollTo(hero.ctaPrimary.link)}
-                  className="shadow-purple-500/25 shadow-lg text-white"
+                  className="shadow-purple-500/25 shadow-lg text-white max-w-full px-5 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm"
                 >
-                  <span className="text-white">{hero.ctaPrimary.label || 'Explore Projects'}</span>
-                  <ArrowRight className="w-4 h-4 text-white group-hover:translate-x-1 transition-transform" />
+                  <span className="text-white truncate">{hero.ctaPrimary.label || 'Explore Projects'}</span>
+                  <ArrowRight className="w-4 h-4 text-white group-hover:translate-x-1 transition-transform shrink-0" />
                 </ShimmerButton>
               </MagneticButton>
             )}
 
             {hero.ctaSecondary?.show && (
-              <MagneticButton>
+              <MagneticButton className="max-w-full">
                 <button
                   onClick={() => scrollTo(hero.ctaSecondary.link)}
                   onMouseEnter={() => soundManager.playHover()}
-                  className="px-6 py-3 rounded-full text-sm font-semibold text-slate-800 hover:text-slate-950 dark:text-slate-200 dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 shadow-sm transition-all flex items-center gap-2"
+                  className="px-4 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-semibold text-slate-800 hover:text-slate-950 dark:text-slate-200 dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 shadow-sm transition-all flex items-center gap-2 max-w-full"
                 >
-                  <Mail className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />
-                  <span>{hero.ctaSecondary.label || 'Get in Touch'}</span>
+                  <Mail className="w-4 h-4 text-cyan-500 dark:text-cyan-400 shrink-0" />
+                  <span className="truncate">{hero.ctaSecondary.label || 'Get in Touch'}</span>
                 </button>
               </MagneticButton>
             )}
 
             {hero.resume?.show && (
-              <MagneticButton>
+              <MagneticButton className="max-w-full">
                 <a
                   href={resumeHref}
                   target="_blank"
@@ -192,10 +192,10 @@ export const Hero: React.FC = () => {
                       await downloadResumeFile(hero.resumeFileName);
                     }
                   }}
-                  className="px-5 py-3 rounded-full text-xs font-semibold text-slate-800 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+                  className="px-4 sm:px-5 py-2.5 sm:py-3 rounded-full text-xs font-semibold text-slate-800 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 shadow-sm transition-all flex items-center gap-2 cursor-pointer max-w-full shrink-0"
                 >
-                  <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>{hero.resume?.label || 'Download Resume'}</span>
+                  <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="truncate">{hero.resume?.label || 'Download Resume'}</span>
                 </a>
               </MagneticButton>
             )}

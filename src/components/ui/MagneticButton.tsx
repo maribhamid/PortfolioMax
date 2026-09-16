@@ -20,8 +20,15 @@ export const MagneticButton: React.FC<MagneticButtonProps> = ({
   const config = data.settings.effectsConfig?.magneticButtons;
   const ref = useRef<HTMLDivElement | null>(null);
   const rectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [isTouch, setIsTouch] = React.useState(false);
 
-  const isEnabled = !disabled && (config?.enabled ?? true);
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsTouch(window.matchMedia('(hover: none)').matches);
+    }
+  }, []);
+
+  const isEnabled = !disabled && !isTouch && (config?.enabled ?? true);
   const baseStrength = strength ?? config?.strength ?? 0.35;
 
   const rawX = useMotionValue(0);
