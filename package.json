@@ -14,6 +14,7 @@
     "electron:build": "npm run build && electron-builder",
     "electron:pack": "npm run build && electron-builder --dir",
     "mobile:sync": "npm run build && npx cap sync",
+    "mobile:apk": "npm run mobile:sync && .\\android\\gradlew.bat -p android assembleDebug && node -e \"const fs=require('fs'); fs.mkdirSync('apk',{recursive:true}); fs.copyFileSync('android/app/build/outputs/apk/debug/app-debug.apk','apk/Marib-Portfolio.apk'); console.log('APK ready: apk/Marib-Portfolio.apk');\"",
     "mobile:android": "npm run build && npx cap sync && npx cap open android",
     "mobile:ios": "npm run build && npx cap sync && npx cap open ios"
   },
