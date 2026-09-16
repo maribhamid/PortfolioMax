@@ -1,4 +1,4 @@
-﻿name: Build iOS IPA Package
+name: Build iOS IPA Package
 
 on:
   push:
@@ -28,22 +28,36 @@ jobs:
       - name: Sync Capacitor iOS
         run: npx cap sync ios
 
-      - name: Build iOS Archive (Unsigned / Ad-Hoc Ready)
+      - name: Resolve Swift Package Dependencies
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -resolvePackageDependencies
+
+      - name: Build Unsigned iOS App
         run: |
           xcodebuild -project ios/App/App.xcodeproj \
             -scheme App \
             -configuration Release \
             -destination "generic/platform=iOS" \
-            -archivePath build/App.xcarchive \
+            -derivedDataPath build \
+            CODE_SIGN_STYLE="Manual" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            archive
+            ALLOW_SIGNING_WITHOUT_TEAM=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build
 
       - name: Package into IPA
         run: |
           mkdir -p Payload
-          cp -r build/App.xcarchive/Products/Applications/App.app Payload/
+          APP_DIR=$(find build/Build/Products -type d -name "App.app" | head -n 1)
+          if [ -z "$APP_DIR" ]; then
+            echo "::error::App.app bundle was not found in build products!"
+            exit 1
+          fi
+          echo "Found app bundle at: $APP_DIR"
+          cp -R "$APP_DIR" Payload/
+          codesign --force --deep --sign - "Payload/App.app" || true
           zip -r Marib-Portfolio.ipa Payload
           mkdir -p dist-ios
           mv Marib-Portfolio.ipa dist-ios/
