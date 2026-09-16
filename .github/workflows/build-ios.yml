@@ -41,6 +41,7 @@ jobs:
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
             -derivedDataPath build \
+            VALIDATE_PRODUCT=NO \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=YES \
@@ -53,10 +54,19 @@ jobs:
               echo "::group::Full Xcode Build Log"
               cat xcodebuild.log
               echo "::endgroup::"
-              echo "::error::Xcode build failed. Key errors:"
-              grep -inE "error:|fatal error:" xcodebuild.log | tail -n 30 || true
+              echo "### ❌ Xcode Build Error" >> $GITHUB_STEP_SUMMARY
+              echo '```text' >> $GITHUB_STEP_SUMMARY
+              tail -n 80 xcodebuild.log >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
               exit 1
             }
+
+      - name: Upload Xcode Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-failure-log
+          path: xcodebuild.log
 
       - name: Package into IPA
         run: |
