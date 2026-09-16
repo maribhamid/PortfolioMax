@@ -198,7 +198,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/30"
               >
                 <Download className="w-4 h-4" />
-                <span>Download Marib-Portfolio.apk (4.60 MB)</span>
+                <span>Download Marib-Portfolio.apk (8.77 MB)</span>
               </a>
 
               <div className="p-2.5 rounded-lg bg-black/40 border border-white/5 text-[11px] text-slate-400 space-y-1">
