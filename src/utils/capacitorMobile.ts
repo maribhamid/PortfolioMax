@@ -20,6 +20,7 @@ export async function triggerHaptic(style: ImpactStyle = ImpactStyle.Light): Pro
 
 export async function initCapacitorNativeMobile(options?: {
   onBackButton?: () => boolean; // return true if the back action was consumed by a modal/admin view
+  onForeground?: () => void;
 }): Promise<void> {
   if (!isNativeMobile()) return;
 
@@ -56,5 +57,16 @@ export async function initCapacitorNativeMobile(options?: {
     });
   } catch (err) {
     console.warn('Android backButton listener notice:', err);
+  }
+
+  // 4. Handle Foreground Lifecycle (Real-time dynamic refresh)
+  try {
+    CapApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive && options?.onForeground) {
+        options.onForeground();
+      }
+    });
+  } catch (err) {
+    console.warn('appStateChange listener notice:', err);
   }
 }

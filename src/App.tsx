@@ -110,6 +110,7 @@ const PortfolioContent: React.FC = () => {
     isAuthenticated,
     isInstallModalOpen,
     setIsInstallModalOpen,
+    forceSyncToCloud,
   } = usePortfolio();
   const { settings } = data;
   const { visibleSections } = settings;
@@ -173,8 +174,11 @@ const PortfolioContent: React.FC = () => {
         }
         return false;
       },
+      onForeground: () => {
+        forceSyncToCloud();
+      },
     });
-  }, [isInstallModalOpen, isLoginModalOpen, isAdminOpen, setIsInstallModalOpen, setIsLoginModalOpen, setIsAdminOpen]);
+  }, [isInstallModalOpen, isLoginModalOpen, isAdminOpen, setIsInstallModalOpen, setIsLoginModalOpen, setIsAdminOpen, forceSyncToCloud]);
 
   const showGrid = bgConfig?.retroGrid ?? settings.showRetroGrid;
   const showMeteors = bgConfig?.meteors ?? settings.showMeteors;

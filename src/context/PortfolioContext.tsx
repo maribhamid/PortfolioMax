@@ -713,6 +713,16 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     };
 
+    const handleReSync = () => {
+      if (!isMounted) return;
+      if (!unsubscribe) {
+        setupSync();
+      }
+    };
+
+    window.addEventListener('online', handleReSync);
+    window.addEventListener('focus', handleReSync);
+
     const initTimer = setTimeout(() => {
       if (isMounted) setupSync();
     }, 150);
@@ -720,6 +730,8 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return () => {
       isMounted = false;
       clearTimeout(initTimer);
+      window.removeEventListener('online', handleReSync);
+      window.removeEventListener('focus', handleReSync);
       unsubscribe?.();
     };
   }, []);
@@ -777,7 +789,50 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const forceSyncToCloud = async () => {
-    await saveAllChanges();
+    if (isAuthenticated && saveStatusRef.current === 'unsaved') {
+      await saveAllChanges();
+      return;
+    }
+
+    if (!isFirebaseConfigured) return;
+    try {
+      setCloudSyncStatus('syncing');
+      const [{ doc, getDoc }, { getDb }] = await Promise.all([
+        import('firebase/firestore'),
+        import('../lib/firebase')
+      ]);
+      const firestoreDb = getDb();
+      if (!firestoreDb) return;
+      const snap = await getDoc(doc(firestoreDb, 'portfolio', 'data'));
+      if (snap.exists()) {
+        const remoteData = snap.data() as Partial<PortfolioData>;
+        if (saveStatusRef.current !== 'unsaved') {
+          setData((prev) => {
+            const merged: PortfolioData = {
+              ...defaultPortfolioData,
+              ...remoteData,
+              settings: {
+                ...defaultPortfolioData.settings,
+                ...(remoteData.settings || {}),
+                visibleSections: {
+                  ...defaultPortfolioData.settings.visibleSections,
+                  ...(remoteData.settings?.visibleSections || {}),
+                },
+              },
+            };
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+            } catch {}
+            currentDataRef.current = merged;
+            return merged;
+          });
+        }
+        setCloudSyncStatus('synced');
+        setLastSyncedAt(new Date());
+      }
+    } catch (e) {
+      console.warn('Failed to force sync from cloud:', e);
+    }
   };
 
   /**

@@ -31,6 +31,15 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // Enable F5 and Ctrl+R / Cmd+R reload for dynamic refreshing
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown') {
+      if (((input.control || input.meta) && input.key.toLowerCase() === 'r') || input.key === 'F5') {
+        mainWindow.webContents.reload();
+      }
+    }
+  });
+
   // Handle external links: always open in user's default OS browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http:') || url.startsWith('https:') || url.startsWith('mailto:')) {

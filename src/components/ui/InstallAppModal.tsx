@@ -140,20 +140,20 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
                       Direct Android APK Package
                     </h4>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                      v1.0.0
+                      v1.1.0 Latest
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                    Native Android release package with splash screen, edge-to-edge rendering, offline caching, and real-time Firestore synchronization.
+                    Native Android release package with splash screen, edge-to-edge rendering, offline caching, and real-time bidirectional Firestore synchronization. Any updates to the database or UI automatically reflect on your device.
                   </p>
                 </div>
               </div>
 
               {/* Feature Pills */}
               <div className="flex flex-wrap gap-2 text-[11px] font-mono text-slate-300">
-                <span className="px-2.5 py-1 rounded-lg bg-black/40 border border-emerald-500/20 flex items-center gap-1.5">
+                <span className="px-2.5 py-1 rounded-lg bg-black/40 border border-emerald-500/20 flex items-center gap-1.5 text-emerald-300 font-semibold">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  Real-time CMS Sync
+                  Live Dynamic Sync
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-black/40 border border-emerald-500/20 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -173,7 +173,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
                 className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs sm:text-sm font-bold transition-all shadow-lg shadow-emerald-600/30 cursor-pointer active:scale-[0.98]"
               >
                 <Download className="w-4 h-4" />
-                <span>Download Marib-Portfolio.apk (9.2 MB)</span>
+                <span>Download Marib-Portfolio.apk (13.8 MB)</span>
               </a>
 
               {/* 3-Step Install Guide */}
@@ -305,17 +305,25 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
                       Windows Desktop Setup Installer
                     </h4>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                      Windows 64-bit
+                      v1.1.0 Ready
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                    Official desktop release with custom titlebar, system tray minimization, native push alerts, offline support, and full Admin Studio access.
+                    Official desktop release with custom titlebar, system tray minimization, native push alerts, offline support, full Admin Studio access, and real-time live database synchronization.
                   </p>
                 </div>
               </div>
 
               {/* Feature Pills */}
               <div className="flex flex-wrap gap-2 text-[11px] font-mono text-slate-300">
+                <span className="px-2.5 py-1 rounded-lg bg-black/40 border border-cyan-500/20 flex items-center gap-1.5 text-cyan-300 font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
+                  Live Dynamic Sync
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-black/40 border border-cyan-500/20 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
+                  F5 / Ctrl+R Reload
+                </span>
                 <span className="px-2.5 py-1 rounded-lg bg-black/40 border border-cyan-500/20 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
                   Desktop Titlebar & Tray
@@ -323,10 +331,6 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
                 <span className="px-2.5 py-1 rounded-lg bg-black/40 border border-cyan-500/20 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
                   Full Offline Mode
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-black/40 border border-cyan-500/20 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
-                  Real-time Cloud Sync
                 </span>
               </div>
 
