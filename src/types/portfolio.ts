@@ -196,6 +196,7 @@ export interface SiteSettings {
   showRetroGrid: boolean;
   showAvailabilityBadge: boolean;
   visibleSections: VisibleSections;
+  adminUsername?: string;
   adminPassword?: string;
   effectsConfig?: MotionEffectsConfig;
 }

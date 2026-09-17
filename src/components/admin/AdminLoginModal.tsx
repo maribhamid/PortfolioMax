@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Eye, EyeOff, ShieldCheck, X, ArrowRight, AlertCircle, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ShieldCheck, X, ArrowRight, AlertCircle, AlertTriangle, ShieldAlert, KeyRound } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { BorderBeam } from '../ui/BorderBeam';
 import { ShimmerButton } from '../ui/ShimmerButton';
@@ -11,9 +11,10 @@ const LOCKOUT_SECONDS = 60;
 
 export const AdminLoginModal: React.FC = () => {
   const { isLoginModalOpen, setIsLoginModalOpen, login } = usePortfolio();
+  const [username, setUsername] = useState('maribhamid@port.com');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [shake, setShake] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutRemaining, setLockoutRemaining] = useState(0);
@@ -45,11 +46,25 @@ export const AdminLoginModal: React.FC = () => {
     e.preventDefault();
     if (lockoutRemaining > 0) return;
 
-    const success = login(password);
+    if (!username.trim()) {
+      setErrorMessage('Please enter your admin email or username.');
+      setShake(true);
+      setTimeout(() => setShake(false), 500);
+      return;
+    }
+
+    if (!password) {
+      setErrorMessage('Please enter your admin password.');
+      setShake(true);
+      setTimeout(() => setShake(false), 500);
+      return;
+    }
+
+    const success = login(username.trim(), password);
     if (!success) {
       const nextFailed = failedAttempts + 1;
       setFailedAttempts(nextFailed);
-      setError(true);
+      setErrorMessage('Invalid username or password. Access denied.');
       setShake(true);
       soundManager.playClick();
       setTimeout(() => setShake(false), 600);
@@ -58,7 +73,7 @@ export const AdminLoginModal: React.FC = () => {
         setLockoutRemaining(LOCKOUT_SECONDS);
       }
     } else {
-      setError(false);
+      setErrorMessage(null);
       setPassword('');
       setFailedAttempts(0);
     }
@@ -68,7 +83,7 @@ export const AdminLoginModal: React.FC = () => {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -89,9 +104,9 @@ export const AdminLoginModal: React.FC = () => {
           }}
           exit={{ opacity: 0, scale: 0.92, y: 20 }}
           transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-          className="relative w-full max-w-md bg-white dark:bg-[#0c0f1d] border border-slate-200 dark:border-white/20 rounded-3xl p-7 z-10 shadow-2xl overflow-hidden"
+          className="relative w-full max-w-md bg-white dark:bg-[#0c0f1d] border border-slate-200 dark:border-white/20 rounded-3xl p-6 sm:p-8 z-10 shadow-2xl overflow-hidden"
         >
-          <BorderBeam size={180} duration={8} colorFrom="#8b5cf6" colorTo="#06b6d4" />
+          <BorderBeam size={200} duration={8} colorFrom="#8b5cf6" colorTo="#06b6d4" />
 
           {/* Close button */}
           <button
@@ -105,14 +120,14 @@ export const AdminLoginModal: React.FC = () => {
           <div className="text-center space-y-2 mb-6">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-cyan-500 p-[1.5px] mx-auto shadow-xl shadow-purple-500/20">
               <div className="w-full h-full bg-slate-50 dark:bg-black/90 rounded-[14px] flex items-center justify-center">
-                <Lock className="w-6 h-6 text-purple-600 dark:text-purple-300" />
+                <KeyRound className="w-6 h-6 text-purple-600 dark:text-purple-300" />
               </div>
             </div>
             <h3 className="text-xl font-bold font-display text-slate-900 dark:text-white">
-              Admin Access Gate
+              Admin Portal Login
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
-              Please authenticate to access the portfolio content management system.
+              Authenticate with authorized credentials to access the portfolio management suite.
             </p>
           </div>
 
@@ -131,10 +146,40 @@ export const AdminLoginModal: React.FC = () => {
           ) : (
             /* Form */
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Username / Email Field */}
+              <div>
+                <label className="block text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  ADMIN EMAIL / USERNAME
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="email"
+                    required
+                    autoFocus
+                    disabled={isLockedOut}
+                    placeholder="maribhamid@port.com"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
+                    className={`w-full bg-slate-50 dark:bg-black/50 border rounded-xl pl-10 pr-4 py-2.5 sm:py-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:bg-white dark:focus:bg-black/60 transition-all ${
+                      errorMessage
+                        ? 'border-rose-500 shadow-rose-500/20 shadow-lg'
+                        : 'border-slate-300 dark:border-white/15 focus:border-purple-500/70 focus:ring-1 focus:ring-purple-500'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Password Field */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-mono font-semibold text-slate-700 dark:text-slate-300">
-                    ADMIN PASSWORD / PASSKEY
+                    ADMIN PASSWORD
                   </label>
                   {failedAttempts > 0 && failedAttempts < MAX_FAILED_ATTEMPTS && (
                     <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 font-semibold">
@@ -144,20 +189,22 @@ export const AdminLoginModal: React.FC = () => {
                 </div>
 
                 <div className="relative">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
-                    autoFocus
                     disabled={isLockedOut}
-                    placeholder="Enter admin password..."
+                    placeholder="Enter password..."
                     value={password}
                     onKeyUp={handleKeyUp}
                     onChange={(e) => {
                       setPassword(e.target.value);
-                      if (error) setError(false);
+                      if (errorMessage) setErrorMessage(null);
                     }}
-                    className={`w-full bg-slate-50 dark:bg-black/50 border rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 pr-11 focus:outline-none focus:bg-white dark:focus:bg-black/60 transition-all ${
-                      error
+                    className={`w-full bg-slate-50 dark:bg-black/50 border rounded-xl pl-10 pr-11 py-2.5 sm:py-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:bg-white dark:focus:bg-black/60 transition-all ${
+                      errorMessage
                         ? 'border-rose-500 shadow-rose-500/20 shadow-lg'
                         : 'border-slate-300 dark:border-white/15 focus:border-purple-500/70 focus:ring-1 focus:ring-purple-500'
                     }`}
@@ -179,29 +226,32 @@ export const AdminLoginModal: React.FC = () => {
                   </div>
                 )}
 
-                {error && !isLockedOut && (
+                {errorMessage && !isLockedOut && (
                   <motion.div
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 mt-2 font-mono"
                   >
                     <AlertCircle className="w-3.5 h-3.5" />
-                    <span>Incorrect password. Please try again.</span>
+                    <span>{errorMessage}</span>
                   </motion.div>
                 )}
               </div>
 
-              <ShimmerButton type="submit" className="w-full mt-2" disabled={isLockedOut}>
-                <span>Unlock Admin Panel</span>
+              <ShimmerButton type="submit" className="w-full mt-3" disabled={isLockedOut}>
+                <span>Sign In to Admin Panel</span>
                 <ArrowRight className="w-4 h-4" />
               </ShimmerButton>
             </form>
           )}
 
           {/* Security Badge Footer */}
-          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-white/10 flex items-center justify-center gap-1.5 text-[10px] font-mono text-slate-500 dark:text-slate-400">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Encrypted Session Authentication Layer</span>
+          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-white/10 flex items-center justify-between text-[10px] font-mono text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Encrypted Session Gate</span>
+            </div>
+            <span className="text-slate-400">maribhamid@port.com</span>
           </div>
         </motion.div>
       </div>

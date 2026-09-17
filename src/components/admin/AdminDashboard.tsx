@@ -21,7 +21,9 @@ import {
   DatabaseZap,
   Loader2,
   CheckCircle2,
-  Inbox
+  Inbox,
+  Save,
+  Undo2
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { HeroEditor } from './editors/HeroEditor';
@@ -86,6 +88,8 @@ export const AdminDashboard: React.FC = () => {
     saveStatus,
     lastSavedAt,
     saveAllChanges,
+    discardChanges,
+    adminUser,
   } = usePortfolio();
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -105,6 +109,18 @@ export const AdminDashboard: React.FC = () => {
       setTimeout(() => setSyncMessage(null), 4000);
     }
   };
+
+  // Bind Ctrl+S / Cmd+S inside admin panel to immediately trigger Save to Firestore
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveAll();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [saveAllChanges]);
 
   const handleUploadLocalStorage = async () => {
     setIsSyncingLocal(true);
@@ -221,15 +237,32 @@ export const AdminDashboard: React.FC = () => {
               <button
                 onClick={handleSaveAll}
                 disabled={isManualSaving || saveStatus === 'saving'}
-                title="Immediately save and synchronize all changes to local storage & Firestore"
-                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-600/25 flex items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+                title="Immediately commit and publish all changes to Cloud Firestore (Ctrl+S)"
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  saveStatus === 'unsaved'
+                    ? 'bg-gradient-to-r from-amber-500 via-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 hover:scale-[1.03] active:scale-[0.98] ring-2 ring-amber-400/60'
+                    : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-600/25 hover:scale-[1.02] active:scale-[0.98]'
+                } disabled:opacity-50`}
               >
                 {isManualSaving || saveStatus === 'saving' ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                    <span>Saving to Cloud...</span>
+                  </>
+                ) : saveStatus === 'unsaved' ? (
+                  <>
+                    <Save className="w-3.5 h-3.5 text-amber-200 animate-pulse" />
+                    <span>Save Changes</span>
+                    <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-amber-400/30 text-[9px] font-mono text-amber-200 font-bold uppercase tracking-wider">
+                      Unsaved
+                    </span>
+                  </>
                 ) : (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Saved</span>
+                  </>
                 )}
-                <span>Save Changes</span>
               </button>
 
               {/* Force Cloud Sync Button */}
@@ -348,6 +381,66 @@ export const AdminDashboard: React.FC = () => {
               {activeTab === 'security' && <SecurityEditor />}
             </div>
           </div>
+
+          {/* Unsaved Changes Action Banner (Explicit Save Workflow) */}
+          {saveStatus === 'unsaved' && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              className="px-5 py-3 bg-gradient-to-r from-amber-500/15 via-purple-500/10 to-indigo-500/15 dark:from-amber-500/20 dark:via-purple-500/15 dark:to-indigo-500/20 border-t border-amber-500/30 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 shrink-0"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                </span>
+                <div>
+                  <p className="text-xs font-bold text-slate-800 dark:text-amber-200">
+                    Unsaved Changes Detected
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">
+                    Your updates are kept locally in draft mode. Press &ldquo;Save to Cloud&rdquo; or Ctrl+S to persist them into Firebase Firestore.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundManager.playClick();
+                    discardChanges();
+                    setSyncMessage('Draft changes discarded. Restored last saved database version.');
+                    setTimeout(() => setSyncMessage(null), 3000);
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-white/10 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  <span>Discard Draft</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveAll}
+                  disabled={isManualSaving}
+                  className="px-4 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-500 via-purple-600 to-indigo-600 hover:from-amber-400 hover:via-purple-500 hover:to-indigo-500 text-white shadow-lg shadow-purple-600/30 hover:scale-[1.02] active:scale-[0.98] flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isManualSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving to Cloud...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save to Cloud Database</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
       </div>
     </AnimatePresence>

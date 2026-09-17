@@ -226,6 +226,7 @@ export const defaultPortfolioData: PortfolioData = {
     showMeteors: true,
     showRetroGrid: true,
     showAvailabilityBadge: true,
+    adminUsername: "maribhamid@port.com",
     adminPassword: "admin123",
     visibleSections: {
       hero: true,

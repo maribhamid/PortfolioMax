@@ -15,10 +15,12 @@ import {
 import { soundManager } from '../../../utils/audio';
 
 export const SecurityEditor: React.FC = () => {
-  const { data, changeAdminPassword, logout } = usePortfolio();
+  const { data, changeAdminCredentials, changeAdminPassword, logout } = usePortfolio();
+  const currentSavedUsername = data.settings.adminUsername || 'maribhamid@port.com';
   const currentSavedPassword = data.settings.adminPassword || 'admin123';
 
   const [currentInput, setCurrentInput] = useState('');
+  const [newUsername, setNewUsername] = useState(currentSavedUsername);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrent, setShowCurrent] = useState(false);
@@ -39,34 +41,52 @@ export const SecurityEditor: React.FC = () => {
 
   const strength = getStrength(newPassword);
 
-  const handleUpdatePassword = (e: React.FormEvent) => {
+  const handleUpdateCredentials = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (currentInput !== currentSavedPassword) {
       soundManager.playClick();
-      setMessage({ type: 'error', text: 'Current password is incorrect.' });
+      setMessage({ type: 'error', text: 'Current password is incorrect. Verification failed.' });
       return;
     }
 
-    if (newPassword.length < 4) {
+    if (!newUsername.trim()) {
       soundManager.playClick();
-      setMessage({ type: 'error', text: 'New password must be at least 4 characters.' });
+      setMessage({ type: 'error', text: 'Admin username or email cannot be empty.' });
       return;
     }
 
-    if (newPassword !== confirmPassword) {
-      soundManager.playClick();
-      setMessage({ type: 'error', text: 'New password and confirmation do not match.' });
-      return;
+    const nextPass = newPassword.trim() ? newPassword : currentSavedPassword;
+
+    if (newPassword.trim()) {
+      if (newPassword.length < 4) {
+        soundManager.playClick();
+        setMessage({ type: 'error', text: 'New password must be at least 4 characters.' });
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        soundManager.playClick();
+        setMessage({ type: 'error', text: 'New password and confirmation do not match.' });
+        return;
+      }
     }
 
-    changeAdminPassword(newPassword);
+    if (changeAdminCredentials) {
+      changeAdminCredentials(newUsername.trim(), nextPass);
+    } else {
+      changeAdminPassword(nextPass);
+    }
+
     soundManager.playSuccess();
-    setMessage({ type: 'success', text: 'Admin passkey successfully updated!' });
+    setMessage({
+      type: 'success',
+      text: 'Admin credentials updated! Click "Save to Cloud Database" above to finalize and persist into Firestore.'
+    });
     setCurrentInput('');
     setNewPassword('');
     setConfirmPassword('');
-    setTimeout(() => setMessage(null), 5000);
+    setTimeout(() => setMessage(null), 7000);
   };
 
   return (
@@ -102,14 +122,44 @@ export const SecurityEditor: React.FC = () => {
       <div className="p-5 rounded-2xl bg-slate-50/80 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 space-y-4">
         <div className="flex items-center gap-2 text-xs font-mono font-bold text-slate-900 dark:text-white uppercase tracking-wider">
           <Key className="w-4 h-4 text-purple-500" />
-          <span>Update Master Passkey</span>
+          <span>Admin Authentication & Credentials</span>
         </div>
 
-        <form onSubmit={handleUpdatePassword} className="space-y-4">
-          {/* Current Password */}
+        {/* Current Active Account Indicator */}
+        <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-mono uppercase text-purple-600 dark:text-purple-400 font-bold block">
+              Active Authorized Admin Email / Username
+            </span>
+            <span className="text-xs sm:text-sm font-mono font-semibold text-slate-900 dark:text-white">
+              {currentSavedUsername}
+            </span>
+          </div>
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-mono bg-purple-600/20 text-purple-700 dark:text-purple-300 font-bold">
+            SuperAdmin
+          </span>
+        </div>
+
+        <form onSubmit={handleUpdateCredentials} className="space-y-4">
+          {/* Admin Email/Username field */}
           <div>
             <label className="block text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              CURRENT ADMIN PASSWORD
+              ADMIN EMAIL / USERNAME
+            </label>
+            <input
+              type="text"
+              required
+              value={newUsername}
+              onChange={(e) => setNewUsername(e.target.value)}
+              placeholder="e.g. maribhamid@port.com"
+              className="w-full bg-white dark:bg-black/40 border border-slate-300 dark:border-white/15 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-mono"
+            />
+          </div>
+
+          {/* Current Password Verification */}
+          <div>
+            <label className="block text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              CURRENT MASTER PASSWORD (REQUIRED TO CONFIRM CHANGES)
             </label>
             <div className="relative">
               <input
@@ -117,7 +167,7 @@ export const SecurityEditor: React.FC = () => {
                 required
                 value={currentInput}
                 onChange={(e) => setCurrentInput(e.target.value)}
-                placeholder="Enter current password..."
+                placeholder="Enter current password (default: admin123)..."
                 className="w-full bg-white dark:bg-black/40 border border-slate-300 dark:border-white/15 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all pr-10"
               />
               <button
@@ -134,15 +184,14 @@ export const SecurityEditor: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                NEW MASTER PASSWORD
+                NEW MASTER PASSWORD (OPTIONAL)
               </label>
               <div className="relative">
                 <input
                   type={showNew ? 'text' : 'password'}
-                  required
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="At least 4 characters..."
+                  placeholder="Leave empty to keep current password..."
                   className="w-full bg-white dark:bg-black/40 border border-slate-300 dark:border-white/15 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all pr-10"
                 />
                 <button
@@ -182,7 +231,6 @@ export const SecurityEditor: React.FC = () => {
               </label>
               <input
                 type="password"
-                required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-type new password..."
@@ -210,9 +258,9 @@ export const SecurityEditor: React.FC = () => {
 
           <button
             type="submit"
-            className="px-5 py-2.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-600/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            className="px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
           >
-            Save New Passkey
+            Update Admin Credentials
           </button>
         </form>
       </div>

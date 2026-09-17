@@ -145,6 +145,17 @@ const PortfolioContent: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isAdminOpen, setIsAdminOpen, openAdmin]);
 
+  // Direct route/hash detection: #admin, /admin, or ?admin opens admin gate
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    if (path.endsWith('/admin') || hash === '#admin' || search.includes('admin=true')) {
+      openAdmin();
+    }
+  }, [openAdmin]);
+
   useEffect(() => {
     initCapacitorNativeMobile({
       onBackButton: () => {
